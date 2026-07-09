@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	externalswu "github.com/iniwex5/swu-go/pkg/swu"
+	externalswu "github.com/1239t/swu-go/pkg/swu"
 )
 
 type simAdminSWuProfile struct {

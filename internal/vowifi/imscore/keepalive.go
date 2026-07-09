@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iniwex5/swu-go/pkg/logger"
+	"github.com/1239t/swu-go/pkg/logger"
 )
 
 const maxInitialRegisterJitter = time.Second

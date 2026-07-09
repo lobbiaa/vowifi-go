@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	externalipsec "github.com/iniwex5/swu-go/pkg/ipsec"
-	externalswu "github.com/iniwex5/swu-go/pkg/swu"
+	externalipsec "github.com/1239t/swu-go/pkg/ipsec"
+	externalswu "github.com/1239t/swu-go/pkg/swu"
 	"github.com/1239t/vowifi-go/runtimehost/ikev2"
 	"github.com/1239t/vowifi-go/runtimehost/transport"
 )

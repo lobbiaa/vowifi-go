@@ -15,7 +15,7 @@ import (
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
 	"github.com/icholy/digest"
-	"github.com/iniwex5/swu-go/pkg/logger"
+	"github.com/1239t/swu-go/pkg/logger"
 
 	"github.com/1239t/vowifi-go/internal/vowifi/imsheaders"
 	"github.com/1239t/vowifi-go/internal/vowifi/ipsec3gpp"

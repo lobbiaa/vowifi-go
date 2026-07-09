@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/iniwex5/swu-go/pkg/logger"
+	"github.com/1239t/swu-go/pkg/logger"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"

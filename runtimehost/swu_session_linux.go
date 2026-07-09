@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/iniwex5/swu-go/pkg/logger"
-	externalsim "github.com/iniwex5/swu-go/pkg/sim"
-	externalswu "github.com/iniwex5/swu-go/pkg/swu"
+	"github.com/1239t/swu-go/pkg/logger"
+	externalsim "github.com/1239t/swu-go/pkg/sim"
+	externalswu "github.com/1239t/swu-go/pkg/swu"
 	swusim "github.com/1239t/vowifi-go/engine/sim"
 )
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/emiago/sipgo/sip"
 	"github.com/google/uuid"
-	"github.com/iniwex5/swu-go/pkg/logger"
+	"github.com/1239t/swu-go/pkg/logger"
 
 	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
