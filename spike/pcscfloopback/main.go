@@ -26,8 +26,8 @@ import (
 
 	"github.com/strongswan/govici/vici"
 
-	"github.com/iniwex5/vowifi-go/engine/swu/charon"
-	"github.com/iniwex5/vowifi-go/engine/swu/pcscfbridge"
+	"github.com/1239t/vowifi-go/engine/swu/charon"
+	"github.com/1239t/vowifi-go/engine/swu/pcscfbridge"
 )
 
 const wantPCSCFIP = "203.0.113.66"

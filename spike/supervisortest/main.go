@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/iniwex5/vowifi-go/engine/swu/charon"
+	"github.com/1239t/vowifi-go/engine/swu/charon"
 	"github.com/strongswan/govici/vici"
 )
 

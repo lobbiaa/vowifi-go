@@ -17,12 +17,12 @@ import (
 	"github.com/icholy/digest"
 	"github.com/iniwex5/swu-go/pkg/logger"
 
-	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
-	"github.com/iniwex5/vowifi-go/internal/vowifi/ipsec3gpp"
-	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
-	"github.com/iniwex5/vowifi-go/engine/sim"
-	"github.com/iniwex5/vowifi-go/runtimehost/simauth"
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/internal/vowifi/imsheaders"
+	"github.com/1239t/vowifi-go/internal/vowifi/ipsec3gpp"
+	"github.com/1239t/vowifi-go/internal/vowifi/policy"
+	"github.com/1239t/vowifi-go/engine/sim"
+	"github.com/1239t/vowifi-go/runtimehost/simauth"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 const (

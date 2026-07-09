@@ -6,7 +6,7 @@ import (
 
 	"github.com/emiago/sipgo/sip"
 
-	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
+	"github.com/1239t/vowifi-go/internal/vowifi/imsheaders"
 )
 
 type secAgreeDecision struct {

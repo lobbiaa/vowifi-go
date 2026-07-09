@@ -15,7 +15,7 @@ import (
 	"github.com/icholy/digest"
 	"github.com/iniwex5/swu-go/pkg/logger"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/simauth"
+	"github.com/1239t/vowifi-go/runtimehost/simauth"
 )
 
 // maxChallengeRounds bounds the REGISTER challenge/retry loop: RFC 3310's

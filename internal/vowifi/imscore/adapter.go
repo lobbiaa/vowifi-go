@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/runtimehost/messaging"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 // VoiceClientAdapter wraps the legacy voiceclient stack behind an imscore-like

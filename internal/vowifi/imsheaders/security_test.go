@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
+	"github.com/1239t/vowifi-go/internal/vowifi/policy"
 )
 
 const sampleSecurityServer = "ipsec-3gpp;q=0.88;alg=hmac-md5-96;mod=trans," +

@@ -6,7 +6,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 // IMSNetwork abstracts userspace or system IMS dataplane sockets.

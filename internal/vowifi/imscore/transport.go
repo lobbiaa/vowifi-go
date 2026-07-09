@@ -9,8 +9,8 @@ import (
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
-	"github.com/iniwex5/vowifi-go/internal/vowifi/ipsec3gpp"
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/internal/vowifi/ipsec3gpp"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 func newSWUNetstack(localIP net.IP, dp voiceclient.PacketDataplane) (voiceclient.SWUTCPDialer, error) {

@@ -3,10 +3,10 @@ package imscore
 import (
 	"net"
 
-	"github.com/iniwex5/vowifi-go/engine/sim"
-	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
-	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/engine/sim"
+	"github.com/1239t/vowifi-go/internal/vowifi/policy"
+	"github.com/1239t/vowifi-go/runtimehost/messaging"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 // Config configures the RE-based imscore IMS register + messaging service.

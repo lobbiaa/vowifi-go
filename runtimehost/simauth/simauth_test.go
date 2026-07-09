@@ -9,7 +9,7 @@ import (
 
 	"github.com/icholy/digest"
 
-	"github.com/iniwex5/vowifi-go/engine/sim"
+	"github.com/1239t/vowifi-go/engine/sim"
 )
 
 var (

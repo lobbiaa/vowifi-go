@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/1239t/vowifi-go/runtimehost/messaging"
 )
 
 // USSD over IMS isn't implemented yet -- these exist only so *Client

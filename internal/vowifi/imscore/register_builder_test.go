@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
+	"github.com/1239t/vowifi-go/internal/vowifi/policy"
 )
 
 func TestBuildTemplateSecurityClientSingleMechanism(t *testing.T) {

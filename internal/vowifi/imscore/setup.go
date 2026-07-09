@@ -6,7 +6,7 @@ import (
 
 	"github.com/iniwex5/swu-go/pkg/logger"
 
-	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
+	"github.com/1239t/vowifi-go/internal/vowifi/policy"
 )
 
 // SetupService constructs an imscore Service from resolved IMS configuration.

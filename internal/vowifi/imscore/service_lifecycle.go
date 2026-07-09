@@ -9,7 +9,7 @@ import (
 
 	"github.com/iniwex5/swu-go/pkg/logger"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 // Start runs the full IMS Core lifecycle: REGISTER FSM, ipsec transport runtime,

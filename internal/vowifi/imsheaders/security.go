@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
+	"github.com/1239t/vowifi-go/internal/vowifi/policy"
 )
 
 // SecurityMechanism captures the cryptographic parameters of one ipsec-3gpp

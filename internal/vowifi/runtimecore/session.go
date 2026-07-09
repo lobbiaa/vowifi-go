@@ -3,7 +3,7 @@ package runtimecore
 import (
 	"strings"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/1239t/vowifi-go/runtimehost/messaging"
 )
 
 // BeginSession allocates the runtimecore session handle that runtimehost fills

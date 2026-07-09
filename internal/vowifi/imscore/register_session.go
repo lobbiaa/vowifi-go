@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/iniwex5/swu-go/pkg/logger"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 func resolveStableSIPInstance(cfg Config) string {

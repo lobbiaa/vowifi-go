@@ -3,9 +3,9 @@ package runtimecore
 import (
 	"context"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/identity"
-	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
-	"github.com/iniwex5/vowifi-go/runtimehost/voiceclient"
+	"github.com/1239t/vowifi-go/runtimehost/identity"
+	"github.com/1239t/vowifi-go/runtimehost/messaging"
+	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
 // ProxyConfig mirrors runtimehost.ProxyConfig for the IMS/SWu session layer.

@@ -9,7 +9,7 @@ import (
 	"github.com/emiago/sipgo/sip"
 	"github.com/google/uuid"
 
-	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/1239t/vowifi-go/runtimehost/messaging"
 )
 
 const smsContentType = "application/vnd.3gpp.sms"
