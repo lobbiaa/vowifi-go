@@ -16,6 +16,16 @@ type simAdminSWuProfile struct {
 }
 
 var simAdminSWuProfiles = map[string]simAdminSWuProfile{
+	// O2 Germany - Requires modp1024 (DH Group 2)
+	"262-03": {
+		ikeProposals: []string{
+			"aes256-sha256-prfsha1-modp1024",
+			"aes128-sha256-prfsha1-modp1024",
+			"aes128-sha1-prfsha1-modp1024",
+		},
+		espProposals: []string{"aes256-sha256", "aes128-sha256", "aes128-sha1"},
+		imsTransport: "auto",
+	},
 	// giffgaff (O2 MVNO) — IKE/ESP 提议对齐 SimAdmin GB_EE_23433
 	"234-10": {
 		ikeProposals: []string{
