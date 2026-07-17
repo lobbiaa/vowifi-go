@@ -78,8 +78,18 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 	}
 
 	mnc := strings.TrimSpace(req.Profile.MNC)
+	mcc := strings.TrimSpace(req.Profile.MCC)
+
+	logger.Info("[O2-DEBUG] SWu session start - original MCC/MNC",
+		"mcc", mcc,
+		"mnc_original", mnc,
+		"mnc_length", len(mnc))
+
 	if len(mnc) < 3 {
 		mnc = strings.Repeat("0", 3-len(mnc)) + mnc
+		logger.Info("[O2-DEBUG] MNC padded to 3 digits",
+			"mnc_original", req.Profile.MNC,
+			"mnc_padded", mnc)
 	}
 
 	cfg := &externalswu.Config{
@@ -90,11 +100,22 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 		SIM:           externalSIMAdapter{inner: req.SIM},
 		EnableDriver:  true,
 		DataplaneMode: externalDataplaneMode(req.Dataplane.Mode),
-		MCC:           strings.TrimSpace(req.Profile.MCC),
+		MCC:           mcc,
 		MNC:           mnc,
 		LocalPort:     0,
 	}
-	applySimAdminSWuProfile(cfg, req.Profile.MCC, req.Profile.MNC)
+
+	logger.Info("[O2-DEBUG] Calling applySimAdminSWuProfile",
+		"mcc", mcc,
+		"mnc", mnc,
+		"key", mcc+"-"+mnc)
+
+	applySimAdminSWuProfile(cfg, mcc, mnc)
+
+	logger.Info("[O2-DEBUG] After applySimAdminSWuProfile",
+		"cfg.MCC", cfg.MCC,
+		"cfg.MNC", cfg.MNC,
+		"cfg.IKEProposals_count", len(cfg.IKEProposals))
 	readyCh := make(chan struct{})
 	var readyOnce sync.Once
 	cfg.OnReady = func() {

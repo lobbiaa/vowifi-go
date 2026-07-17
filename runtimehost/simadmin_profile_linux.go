@@ -74,10 +74,21 @@ var simAdminSWuProfiles = map[string]simAdminSWuProfile{
 
 func applySimAdminSWuProfile(cfg *externalswu.Config, mcc, mnc string) {
 	if cfg == nil {
+		logger.Warn("[O2-DEBUG] applySimAdminSWuProfile: cfg is nil")
 		return
 	}
-	profile, ok := simAdminSWuProfiles[simAdminProfileKey(mcc, mnc)]
+
+	key := simAdminProfileKey(mcc, mnc)
+	logger.Info("[O2-DEBUG] applySimAdminSWuProfile called",
+		"mcc_input", mcc,
+		"mnc_input", mnc,
+		"profile_key", key)
+
+	profile, ok := simAdminSWuProfiles[key]
 	if !ok {
+		logger.Info("[O2-DEBUG] No SimAdmin profile found, using default proposals",
+			"key", key,
+			"available_keys", getSimAdminProfileKeys())
 		cfg.IKEProposals = []string{
 			"aes256-sha256-prfsha512-modp2048",
 			"aes256-sha512-prfsha512-modp2048",
@@ -90,6 +101,12 @@ func applySimAdminSWuProfile(cfg *externalswu.Config, mcc, mnc string) {
 		cfg.ESPProposals = []string{"aes256-sha256", "aes128-sha256", "aes256-sha512", "aes128-sha1"}
 		return
 	}
+
+	logger.Info("[O2-DEBUG] SimAdmin profile found",
+		"key", key,
+		"ike_proposals_count", len(profile.ikeProposals),
+		"ike_proposals", profile.ikeProposals)
+
 	cfg.IKEProposals = append([]string(nil), profile.ikeProposals...)
 	cfg.ESPProposals = append([]string(nil), profile.espProposals...)
 }
@@ -107,6 +124,14 @@ func simAdminProfileKey(mcc, mnc string) string {
 		mnc = "0" + mnc
 	}
 	return fmt.Sprintf("%s-%s", mcc, mnc)
+}
+
+func getSimAdminProfileKeys() []string {
+	keys := make([]string, 0, len(simAdminSWuProfiles))
+	for k := range simAdminSWuProfiles {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func simAdminIMSTransport(mcc, mnc string) string {
