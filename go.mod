@@ -3,14 +3,13 @@ module github.com/1239t/vowifi-go
 go 1.26.3
 
 require (
+	github.com/1239t/swu-go v0.0.1
 	github.com/emiago/sipgo v1.4.0
 	github.com/google/uuid v1.6.0
 	github.com/icholy/digest v1.1.0
-	github.com/1239t/swu-go v0.0.1
 	github.com/strongswan/govici v0.8.2
 	gvisor.dev/gvisor v0.0.0-20240521174809-5eedbf551134
 )
-
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -31,3 +30,6 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
+
+// Use lobbiaa fork with O2 Germany modp1024 fix
+replace github.com/1239t/swu-go => github.com/lobbiaa/swu-go v0.0.2-o2fix
