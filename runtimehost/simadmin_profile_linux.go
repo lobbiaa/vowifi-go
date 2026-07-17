@@ -1,12 +1,9 @@
-//go:build linux
-
 package runtimehost
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/1239t/swu-go/pkg/logger"
 	externalswu "github.com/1239t/swu-go/pkg/swu"
 )
 
@@ -75,21 +72,10 @@ var simAdminSWuProfiles = map[string]simAdminSWuProfile{
 
 func applySimAdminSWuProfile(cfg *externalswu.Config, mcc, mnc string) {
 	if cfg == nil {
-		logger.Warn("[O2-DEBUG] applySimAdminSWuProfile: cfg is nil")
 		return
 	}
-
-	key := simAdminProfileKey(mcc, mnc)
-	logger.Info("[O2-DEBUG] applySimAdminSWuProfile called",
-		"mcc_input", mcc,
-		"mnc_input", mnc,
-		"profile_key", key)
-
-	profile, ok := simAdminSWuProfiles[key]
+	profile, ok := simAdminSWuProfiles[simAdminProfileKey(mcc, mnc)]
 	if !ok {
-		logger.Info("[O2-DEBUG] No SimAdmin profile found, using default proposals",
-			"key", key,
-			"available_keys", getSimAdminProfileKeys())
 		cfg.IKEProposals = []string{
 			"aes256-sha256-prfsha512-modp2048",
 			"aes256-sha512-prfsha512-modp2048",
@@ -102,12 +88,6 @@ func applySimAdminSWuProfile(cfg *externalswu.Config, mcc, mnc string) {
 		cfg.ESPProposals = []string{"aes256-sha256", "aes128-sha256", "aes256-sha512", "aes128-sha1"}
 		return
 	}
-
-	logger.Info("[O2-DEBUG] SimAdmin profile found",
-		"key", key,
-		"ike_proposals_count", len(profile.ikeProposals),
-		"ike_proposals", profile.ikeProposals)
-
 	cfg.IKEProposals = append([]string(nil), profile.ikeProposals...)
 	cfg.ESPProposals = append([]string(nil), profile.espProposals...)
 }

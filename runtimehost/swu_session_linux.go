@@ -80,16 +80,13 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 	mnc := strings.TrimSpace(req.Profile.MNC)
 	mcc := strings.TrimSpace(req.Profile.MCC)
 
-	logger.Info("[O2-DEBUG] SWu session start - original MCC/MNC",
-		"mcc", mcc,
-		"mnc_original", mnc,
-		"mnc_length", len(mnc))
+	fmt.Printf("[O2-DEBUG] SWu session start - original MCC=%s MNC=%s (len=%d)\n",
+		mcc, mnc, len(mnc))
 
 	if len(mnc) < 3 {
 		mnc = strings.Repeat("0", 3-len(mnc)) + mnc
-		logger.Info("[O2-DEBUG] MNC padded to 3 digits",
-			"mnc_original", req.Profile.MNC,
-			"mnc_padded", mnc)
+		fmt.Printf("[O2-DEBUG] MNC padded: original=%s -> padded=%s\n",
+			req.Profile.MNC, mnc)
 	}
 
 	cfg := &externalswu.Config{
@@ -105,17 +102,13 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 		LocalPort:     0,
 	}
 
-	logger.Info("[O2-DEBUG] Calling applySimAdminSWuProfile",
-		"mcc", mcc,
-		"mnc", mnc,
-		"key", mcc+"-"+mnc)
+	fmt.Printf("[O2-DEBUG] Calling applySimAdminSWuProfile: MCC=%s MNC=%s key=%s\n",
+		mcc, mnc, mcc+"-"+mnc)
 
 	applySimAdminSWuProfile(cfg, mcc, mnc)
 
-	logger.Info("[O2-DEBUG] After applySimAdminSWuProfile",
-		"cfg.MCC", cfg.MCC,
-		"cfg.MNC", cfg.MNC,
-		"cfg.IKEProposals_count", len(cfg.IKEProposals))
+	fmt.Printf("[O2-DEBUG] After applySimAdminSWuProfile: cfg.MCC=%s cfg.MNC=%s IKEProposals=%d\n",
+		cfg.MCC, cfg.MNC, len(cfg.IKEProposals))
 	readyCh := make(chan struct{})
 	var readyOnce sync.Once
 	cfg.OnReady = func() {
