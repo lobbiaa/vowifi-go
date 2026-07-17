@@ -32,4 +32,4 @@ require (
 )
 
 // Use lobbiaa fork with O2 Germany modp1024 fix
-replace github.com/1239t/swu-go => github.com/lobbiaa/swu-go v0.0.2-o2fix
+replace github.com/1239t/swu-go => github.com/lobbiaa/swu-go v0.0.3
