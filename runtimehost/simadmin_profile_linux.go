@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/1239t/swu-go/pkg/logger"
 	externalswu "github.com/1239t/swu-go/pkg/swu"
 )
 
