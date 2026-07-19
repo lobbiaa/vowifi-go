@@ -93,13 +93,13 @@ func IMSConfigFromVoice(v voiceclient.Config, template policy.IMSRegisterTemplat
 	if strings.TrimSpace(cfg.CarrierPresetID) == "" {
 		cfg.CarrierPresetID = "3gpp-default"
 	}
-	if strings.TrimSpace(cfg.IMSRegisterTemplate.ID) == "" {
-		// Use O2 Germany template for preset de_o2_26203
-		if cfg.CarrierPresetID == "de_o2_26203" || cfg.CarrierPresetID == "O2_de_26203" {
-			cfg.IMSRegisterTemplate = policy.DefaultO2GermanyTemplate()
-		} else {
-			cfg.IMSRegisterTemplate = policy.DefaultGiffgaffTemplate()
-		}
+
+	// Force O2 Germany template for O2 preset, regardless of passed template
+	if cfg.CarrierPresetID == "de_o2_26203" || cfg.CarrierPresetID == "O2_de_26203" {
+		cfg.IMSRegisterTemplate = policy.DefaultO2GermanyTemplate()
+	} else if strings.TrimSpace(cfg.IMSRegisterTemplate.ID) == "" {
+		// Use default template only if no template specified and not O2
+		cfg.IMSRegisterTemplate = policy.DefaultGiffgaffTemplate()
 	}
 	return cfg
 }
