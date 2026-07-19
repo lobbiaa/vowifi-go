@@ -38,13 +38,26 @@ func NewUserspaceIMSNetwork(localIP net.IP, dataplane voiceclient.PacketDataplan
 }
 
 func (n *UserspaceIMSNetwork) DialContext(ctx context.Context, network string, addr net.Addr, transport string, opts DialOptions) (net.Conn, error) {
-	if n == nil || n.swu == nil {
-		return nil, fmt.Errorf("imscore: userspace IMS network unavailable")
+	if n == nil {
+		return nil, fmt.Errorf("imscore: IMS network unavailable")
 	}
 	tcpAddr, ok := addr.(*net.TCPAddr)
 	if !ok || tcpAddr == nil {
 		return nil, fmt.Errorf("imscore: invalid TCP addr %v", addr)
 	}
+
+	// If swu is nil (TUN mode), use OS TCP stack through TUN interface
+	// This matches SimAdmin's architecture where IMS TCP goes through the OS network stack
+	if n.swu == nil {
+		localPort := 5060
+		if l, ok := ctx.Value(localPortContextKey{}).(int); ok && l > 0 {
+			localPort = l
+		}
+		d := net.Dialer{LocalAddr: &net.TCPAddr{IP: n.localIP, Port: localPort}}
+		return d.DialContext(ctx, "tcp", tcpAddr.String())
+	}
+
+	// Otherwise use netstack dialer (legacy mode)
 	localPort := 5060
 	if l, ok := ctx.Value(localPortContextKey{}).(int); ok && l > 0 {
 		localPort = l
