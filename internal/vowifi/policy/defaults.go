@@ -41,6 +41,8 @@ func DefaultO2GermanyTemplate() IMSRegisterTemplate {
 	return IMSRegisterTemplate{
 		ID:                          "O2_de_26203_ios",
 		SecAgreeMode:                "auto",
+		UsePlainDigestPlaceholder:   false,
+		SupportedHeader:             "path,sec-agree,gruu",
 		IncludePANIAuthenticated:    true,
 		StrictSecurityServerOffer:   true,
 		EnableInitialRejectFallback: false,
