@@ -399,8 +399,9 @@ func buildInitialAuthorization(cfg Config, mode string) string {
 			realm,
 		)
 	default:
+		// aka_empty_uri_first - matches iniwex format: NO algorithm field in initial REGISTER
 		return fmt.Sprintf(
-			`Digest uri="%s",username="%s",algorithm=AKAv1-MD5,response="",realm="%s",nonce=""`,
+			`Digest uri="%s",username="%s",response="",realm="%s",nonce=""`,
 			quoteSipParam(requestURI),
 			quoteSipParam(username),
 			realm,
@@ -414,8 +415,11 @@ func authorizationUsername(cfg Config) string {
 	}
 	imsi := strings.TrimSpace(cfg.IMSI)
 	realm := strings.TrimSpace(cfg.Realm)
-	if imsi != "" && realm != "" {
-		if privateID, _ := voiceclient.BuildIMSIdentity(imsi, realm, strings.TrimSpace(cfg.HomeDomain), "imsi_home_domain"); privateID != "" {
+	domain := strings.TrimSpace(cfg.HomeDomain)
+	if imsi != "" && realm != "" && domain != "" {
+		// Use "imsi_home_domain" shape: IMSI@realm (no "0" prefix)
+		// This matches iniwex/vohive: 262036013159494@ims.mnc003.mcc262.3gppnetwork.org
+		if privateID, _ := voiceclient.BuildIMSIdentity(imsi, realm, domain, "imsi_home_domain"); privateID != "" {
 			return privateID
 		}
 	}
