@@ -410,9 +410,9 @@ func buildInitialAuthorization(cfg Config, mode string) string {
 }
 
 func authorizationUsername(cfg Config) string {
-	if v := strings.TrimSpace(cfg.PrivateID); v != "" {
-		return v
-	}
+	// Always rebuild username using imsi_home_domain shape for Authorization header
+	// Do NOT use cfg.PrivateID directly as it may be EPC NAI format (0IMSI@nai.epc...)
+	// Authorization header needs IMS format: IMSI@ims domain
 	imsi := strings.TrimSpace(cfg.IMSI)
 	realm := strings.TrimSpace(cfg.Realm)
 	domain := strings.TrimSpace(cfg.HomeDomain)
@@ -422,6 +422,11 @@ func authorizationUsername(cfg Config) string {
 		if privateID, _ := voiceclient.BuildIMSIdentity(imsi, realm, domain, "imsi_home_domain"); privateID != "" {
 			return privateID
 		}
+	}
+
+	// Fallback to PrivateID only if BuildIMSIdentity fails
+	if v := strings.TrimSpace(cfg.PrivateID); v != "" {
+		return v
 	}
 	return ""
 }
