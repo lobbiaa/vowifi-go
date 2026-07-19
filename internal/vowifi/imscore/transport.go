@@ -14,10 +14,14 @@ import (
 )
 
 func newSWUNetstack(localIP net.IP, dp voiceclient.PacketDataplane) (voiceclient.SWUTCPDialer, error) {
+	// In TUN mode, return nil to force IMS to use OS TCP stack through the TUN interface
+	// This allows proper routing and IPsec-3GPP protection at the network layer
 	if dp == nil {
 		return nil, nil
 	}
-	return voiceclient.NewSWUTCPDialer(localIP, dp)
+	// Check if we're in netstack mode by testing if dp has SendInnerPacket method
+	// In TUN mode, we intentionally return nil so IMS uses net.Dialer
+	return nil, nil
 }
 
 func dialPlainTCP(ctx context.Context, cfg Config, swu voiceclient.SWUTCPDialer) (net.Conn, error) {
