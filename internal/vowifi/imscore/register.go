@@ -272,7 +272,24 @@ func buildRegisterRequest(cfg Config, state registerState, initial bool, variant
 		expires = 3600
 	}
 	req.AppendHeader(sip.NewHeader("Expires", strconv.Itoa(expires)))
-	req.AppendHeader(sip.NewHeader("Supported", "path,sec-agree,gruu"))
+
+	// Add Require header if specified in template
+	if requireHeader := strings.TrimSpace(cfg.Template.RequireHeader); requireHeader != "" {
+		req.AppendHeader(sip.NewHeader("Require", requireHeader))
+	}
+
+	// Add Proxy-Require header if specified in template
+	if proxyRequireHeader := strings.TrimSpace(cfg.Template.ProxyRequireHeader); proxyRequireHeader != "" {
+		req.AppendHeader(sip.NewHeader("Proxy-Require", proxyRequireHeader))
+	}
+
+	// Add Supported header (use template or default)
+	supportedHeader := strings.TrimSpace(cfg.Template.SupportedHeader)
+	if supportedHeader == "" {
+		supportedHeader = "path,sec-agree,gruu"
+	}
+	req.AppendHeader(sip.NewHeader("Supported", supportedHeader))
+
 	req.AppendHeader(sip.NewHeader("Allow", "INVITE,ACK,CANCEL,BYE,UPDATE,PRACK,MESSAGE,REFER,NOTIFY,INFO,OPTIONS"))
 	req.AppendHeader(sip.NewHeader("P-Preferred-Identity", "<"+cfg.PublicURI+">"))
 	req.AppendHeader(sip.NewHeader("P-Visited-Network-ID", "\""+cfg.HomeDomain+"\""))

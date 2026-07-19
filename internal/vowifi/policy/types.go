@@ -10,6 +10,8 @@ type IMSRegisterTemplate struct {
 	ContactMode                         string
 	FixedPANI                           string
 	SupportedHeader                     string
+	RequireHeader                       string
+	ProxyRequireHeader                  string
 	AllowHeader                         string
 	AccessType                          string
 	ICSIRef                             string
