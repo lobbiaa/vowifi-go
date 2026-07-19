@@ -33,3 +33,31 @@ func DefaultGiffgaffTemplate() IMSRegisterTemplate {
 		SecurityClientMechanisms: mechanisms,
 	}
 }
+
+// DefaultO2GermanyTemplate returns the O2 Germany (26203) IMS register template
+// matching the successful iniwex/vohive configuration.
+func DefaultO2GermanyTemplate() IMSRegisterTemplate {
+	mechanisms := DefaultSecurityClientMechanisms()
+	return IMSRegisterTemplate{
+		ID:                          "O2_de_26203_ios",
+		SecAgreeMode:                "auto",
+		IncludePANIAuthenticated:    true,
+		StrictSecurityServerOffer:   true,
+		EnableInitialRejectFallback: false,
+		ContactParamOrder: []string{
+			"access_type",
+			"audio",
+			"smsip",
+			"icsi_ref",
+			"sip_instance",
+		},
+		SecurityClientMechanisms: mechanisms,
+		RegisterPolicy: IMSRegisterPolicy{
+			ID:                               "default",
+			TemporaryStatusCodes:             []int{408, 429, 500, 502, 503, 504},
+			ForbiddenStatusCodes:             []int{403},
+			InitialRejectFallbackStatusCodes: []int{400, 403, 500},
+			TemporaryRetrySeconds:            60,
+		},
+	}
+}
