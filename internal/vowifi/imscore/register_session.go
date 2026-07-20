@@ -200,8 +200,21 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 			return finalizeRegisterSuccess(s.cfg, *s.state, res)
 		case sip.StatusUnauthorized, sip.StatusProxyAuthRequired:
 			// Check if Security-Server is present - this means we MUST use IPsec
-			if res.GetHeader("Security-Server") != nil {
+			secServer := res.GetHeader("Security-Server")
+			logger.Info("IMS REGISTER 401 Security-Server check",
+				logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)),
+				logger.Bool("has_security_server", secServer != nil),
+				logger.String("security_server_value", func() string {
+					if secServer != nil {
+						return secServer.Value()
+					}
+					return "<nil>"
+				}()))
+
+			if secServer != nil {
 				// Install IPsec immediately and switch to secure transport
+				logger.Info("IMS REGISTER installing IPsec after 401",
+					logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)))
 				if err := installIPSecFromChallenge(s.cfg, s.state, res); err != nil {
 					return nil, fmt.Errorf("ipsec install after 401: %w", err)
 				}
@@ -209,6 +222,8 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, nil, res)
 			}
 			// No Security-Server - use plaintext auth (rare case)
+			logger.Warn("IMS REGISTER 401 without Security-Server, using plaintext auth",
+				logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)))
 			s.phase = registerPhaseAuth
 			return s.runAuthRegisterPhase(ctx, transport, res)
 		default:
