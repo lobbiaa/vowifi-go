@@ -50,6 +50,11 @@ type registerState struct {
 
 	expiresSeconds int
 	verifyHeader   string
+
+	// cachedAuthHeader stores the Authorization header computed during the
+	// initial 401 handling, so buildAuthenticatedRegister can reuse it instead
+	// of recomputing AKA (which would trigger AUTS sync failure on the SIM).
+	cachedAuthHeader string
 }
 
 type registerResult struct {
@@ -232,13 +237,21 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 	if prevReq == nil {
 		return nil, nil, fmt.Errorf("missing previous REGISTER request")
 	}
-	chal, err := selectDigestChallenge(cfg, prevRes)
-	if err != nil {
-		return nil, nil, err
-	}
-	_, authHeader, err := computeAKAAuth(cfg, chal, prevReq)
-	if err != nil {
-		return nil, nil, err
+	var authHeader string
+	if state.cachedAuthHeader != "" {
+		// Reuse the Authorization computed during 401 handling to avoid
+		// recomputing AKA (which triggers AUTS sync failure on the SIM).
+		authHeader = state.cachedAuthHeader
+	} else {
+		chal, err := selectDigestChallenge(cfg, prevRes)
+		if err != nil {
+			return nil, nil, err
+		}
+		_, h, err := computeAKAAuth(cfg, chal, prevReq)
+		if err != nil {
+			return nil, nil, err
+		}
+		authHeader = h
 	}
 
 	req := prevReq.Clone()

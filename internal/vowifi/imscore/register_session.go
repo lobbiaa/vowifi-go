@@ -212,14 +212,30 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 				}()))
 
 			if secServer != nil {
-				// Install IPsec immediately and switch to secure transport
+				// Must compute AKA first to get CK/IK before installing IPsec
+				chal, err := selectDigestChallenge(s.cfg, res)
+				if err != nil {
+					return nil, fmt.Errorf("select challenge after 401: %w", err)
+				}
+				initReq, err := buildRegisterRequest(s.cfg, *s.state, false, initialRegisterVariant{})
+				if err != nil {
+					return nil, fmt.Errorf("build request for AKA: %w", err)
+				}
+				akaResult, authHeader, err := computeAKAAuth(s.cfg, chal, initReq)
+				if err != nil {
+					return nil, fmt.Errorf("compute AKA after 401: %w", err)
+				}
+				s.state.ck, s.state.ik = akaResult.CK, akaResult.IK
+				s.state.cachedAuthHeader = authHeader
 				logger.Info("IMS REGISTER installing IPsec after 401",
-					logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)))
+					logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)),
+					logger.Int("ck_len", len(akaResult.CK)),
+					logger.Int("ik_len", len(akaResult.IK)))
 				if err := installIPSecFromChallenge(s.cfg, s.state, res); err != nil {
 					return nil, fmt.Errorf("ipsec install after 401: %w", err)
 				}
 				s.phase = registerPhaseSecure
-				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, nil, res)
+				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, initReq, res)
 			}
 			// No Security-Server - use plaintext auth (rare case)
 			logger.Warn("IMS REGISTER 401 without Security-Server, using plaintext auth",
