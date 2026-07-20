@@ -199,6 +199,16 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 			}
 			return finalizeRegisterSuccess(s.cfg, *s.state, res)
 		case sip.StatusUnauthorized, sip.StatusProxyAuthRequired:
+			// Check if Security-Server is present - this means we MUST use IPsec
+			if res.GetHeader("Security-Server") != nil {
+				// Install IPsec immediately and switch to secure transport
+				if err := installIPSecFromChallenge(s.cfg, s.state, res); err != nil {
+					return nil, fmt.Errorf("ipsec install after 401: %w", err)
+				}
+				s.phase = registerPhaseSecure
+				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, nil, res)
+			}
+			// No Security-Server - use plaintext auth (rare case)
 			s.phase = registerPhaseAuth
 			return s.runAuthRegisterPhase(ctx, transport, res)
 		default:
