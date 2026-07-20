@@ -3,8 +3,8 @@ package imscore
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/hex"
+	// "encoding/base64" // retained for commented-out decodeChallengeNonce
+	// "encoding/hex"    // retained for commented-out decodeChallengeNonce
 	"fmt"
 	"math/big"
 	"net"
@@ -476,6 +476,11 @@ func buildCellularNetworkInfo(cfg Config) string {
 }
 
 func computeAKAAuth(cfg Config, chal *digest.Challenge, req *sip.Request) (sim.AKAResult, string, error) {
+	// ComputeDigest performs the single AKA computation against the SIM and
+	// returns both the Authorization header and the full AKA result (RES/CK/IK).
+	// We must NOT call CalculateAKA a second time for the same RAND/AUTN: the
+	// USIM's SQN replay protection would reject it with a sync failure and yield
+	// no CK/IK. Reuse result.AKA instead.
 	result, err := simauth.ComputeDigest(cfg.AKA, chal, digest.Options{
 		Method:   req.Method.String(),
 		URI:      req.Recipient.Host,
@@ -484,56 +489,61 @@ func computeAKAAuth(cfg Config, chal *digest.Challenge, req *sip.Request) (sim.A
 	if err != nil {
 		return sim.AKAResult{}, "", err
 	}
-	akaResult, err := akaResultFromChallenge(cfg.AKA, chal)
-	if err != nil {
-		return sim.AKAResult{}, "", err
-	}
-	return akaResult, result.Header, nil
+	return result.AKA, result.Header, nil
 }
 
-func akaResultFromChallenge(provider sim.AKAProvider, chal *digest.Challenge) (sim.AKAResult, error) {
-	if provider == nil {
-		return sim.AKAResult{}, fmt.Errorf("AKA provider required")
-	}
-	rawNonce, err := decodeChallengeNonce(chal.Nonce)
-	if err != nil {
-		return sim.AKAResult{}, err
-	}
-	if len(rawNonce) < 32 {
-		return sim.AKAResult{}, fmt.Errorf("nonce too short for RAND||AUTN")
-	}
-	return provider.CalculateAKA(rawNonce[:16], rawNonce[16:32])
-}
-
-func decodeChallengeNonce(nonce string) ([]byte, error) {
-	trimmed := strings.TrimSpace(nonce)
-	if trimmed == "" {
-		return nil, fmt.Errorf("empty nonce")
-	}
-
-	// Try hex first (most common)
-	if len(trimmed)%2 == 0 {
-		if raw, err := hex.DecodeString(trimmed); err == nil {
-			return raw, nil
-		}
-	}
-
-	// Try base64 (O2 Germany uses this)
-	if raw, err := base64.StdEncoding.DecodeString(trimmed); err == nil {
-		return raw, nil
-	}
-
-	// Try base64 with padding
-	padded := trimmed
-	for len(padded)%4 != 0 {
-		padded += "="
-	}
-	if raw, err := base64.StdEncoding.DecodeString(padded); err == nil {
-		return raw, nil
-	}
-
-	return nil, fmt.Errorf("unsupported nonce encoding")
-}
+// akaResultFromChallenge is retained (commented out) for reference. It performed
+// a SECOND CalculateAKA for the same RAND/AUTN just to obtain CK/IK, which the
+// USIM rejects with a sync failure (SQN replay protection). computeAKAAuth now
+// reuses simauth.ComputeDigest's result.AKA instead, so this is no longer used.
+//
+// func akaResultFromChallenge(provider sim.AKAProvider, chal *digest.Challenge) (sim.AKAResult, error) {
+// 	if provider == nil {
+// 		return sim.AKAResult{}, fmt.Errorf("AKA provider required")
+// 	}
+// 	rawNonce, err := decodeChallengeNonce(chal.Nonce)
+// 	if err != nil {
+// 		return sim.AKAResult{}, err
+// 	}
+// 	if len(rawNonce) < 32 {
+// 		return sim.AKAResult{}, fmt.Errorf("nonce too short for RAND||AUTN")
+// 	}
+// 	return provider.CalculateAKA(rawNonce[:16], rawNonce[16:32])
+// }
+//
+// decodeChallengeNonce is retained (commented out) alongside akaResultFromChallenge.
+// simauth.decodeNonceBytes performs the equivalent hex/base64 decoding used by the
+// live path.
+//
+// func decodeChallengeNonce(nonce string) ([]byte, error) {
+// 	trimmed := strings.TrimSpace(nonce)
+// 	if trimmed == "" {
+// 		return nil, fmt.Errorf("empty nonce")
+// 	}
+//
+// 	// Try hex first (most common)
+// 	if len(trimmed)%2 == 0 {
+// 		if raw, err := hex.DecodeString(trimmed); err == nil {
+// 			return raw, nil
+// 		}
+// 	}
+//
+// 	// Try base64 (O2 Germany uses this)
+// 	if raw, err := base64.StdEncoding.DecodeString(trimmed); err == nil {
+// 		return raw, nil
+// 	}
+//
+// 	// Try base64 with padding
+// 	padded := trimmed
+// 	for len(padded)%4 != 0 {
+// 		padded += "="
+// 	}
+// 	if raw, err := base64.StdEncoding.DecodeString(padded); err == nil {
+// 		return raw, nil
+// 	}
+//
+// 	return nil, fmt.Errorf("unsupported nonce encoding")
+// }
 
 func selectDigestChallenge(cfg Config, res *sip.Response) (*digest.Challenge, error) {
 	headers := res.GetHeaders("WWW-Authenticate")

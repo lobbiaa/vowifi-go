@@ -53,6 +53,13 @@ type Result struct {
 	// and the caller should expect the server to respond with a fresh
 	// challenge rather than accept this attempt.
 	SyncFailure bool
+
+	// AKA carries the full AKA result (RES/CK/IK) computed from the SIM.
+	// Callers needing CK/IK (e.g. to derive IPsec keys) must read it here
+	// instead of calling CalculateAKA again: the USIM rejects a repeat
+	// computation for the same RAND/AUTN with a sync failure (SQN replay
+	// protection), so a second call would return AUTS and no CK/IK.
+	AKA sim.AKAResult
 }
 
 // ComputeDigest runs one round of RFC 3310 Digest AKAv1-MD5: decodes
@@ -104,7 +111,7 @@ func ComputeDigest(provider sim.AKAProvider, chal *digest.Challenge, opts digest
 			return Result{}, fmt.Errorf("simauth: compute digest: %w", err)
 		}
 		cred.Algorithm = wireAlgorithm
-		return Result{Header: cred.String()}, nil
+		return Result{Header: cred.String(), AKA: akaResult}, nil
 
 	case errors.Is(akaErr, sim.ErrSyncFailure):
 		opts.Password = ""
@@ -115,7 +122,7 @@ func ComputeDigest(provider sim.AKAProvider, chal *digest.Challenge, opts digest
 		cred.Algorithm = wireAlgorithm
 		header := fmt.Sprintf(`%s, auts="%s"`, cred.String(),
 			base64.StdEncoding.EncodeToString(akaResult.AUTS))
-		return Result{Header: header, SyncFailure: true}, nil
+		return Result{Header: header, SyncFailure: true, AKA: akaResult}, nil
 
 	default:
 		return Result{}, fmt.Errorf("simauth: CalculateAKA: %w", akaErr)
