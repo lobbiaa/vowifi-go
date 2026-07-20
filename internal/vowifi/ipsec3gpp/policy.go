@@ -122,9 +122,8 @@ type portPair struct {
 }
 
 func fillPorts(mech SecurityMechanism) portPair {
-	// mech.PortC/PortS come from Security-Server (P-CSCF's ports).
-	// These are REMOTE ports from the UE's perspective.
-	// The UE will generate its own LOCAL ports dynamically.
+	// mech.PortC/PortS come from Security-Server (P-CSCF's announced ports).
+	// These are the REMOTE ports the UE will connect to.
 	remoteC, remoteS := mech.PortC, mech.PortS
 	if remoteC == 0 {
 		remoteC = 5060
@@ -132,11 +131,17 @@ func fillPorts(mech SecurityMechanism) portPair {
 	if remoteS == 0 {
 		remoteS = remoteC
 	}
-	// Local ports: use ephemeral/dynamic ports. The UE announces these
-	// in Security-Client, but they're generated per-registration and not
-	// stored in the mech passed here. Default to reusing remote values
-	// for SA selector symmetry (actual bind is dynamic).
-	localC, localS := remoteC, remoteS
+
+	// Local ports: the UE generates its own protected client/server ports
+	// (announced in Security-Client). For now, reuse a shifted version of
+	// the remote ports to avoid ephemeral conflicts. Proper implementation
+	// should allocate fresh ephemeral ports and announce them in Security-Client.
+	localC := remoteC + 1000
+	if localC > 65535 {
+		localC = 40000
+	}
+	localS := localC + 1
+
 	return portPair{
 		localC:  localC,
 		localS:  localS,
