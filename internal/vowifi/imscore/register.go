@@ -208,12 +208,14 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 	if rip == nil {
 		return nil, fmt.Errorf("invalid transport P-CSCF %q", transportAddr)
 	}
-	portC := state.ipsecPolicy.RemotePortC
-	if portC <= 0 && state.selectedOffer != nil {
-		portC = state.selectedOffer.PortC
+	// UE sends protected REGISTER from its port_uc (LocalPortC) to P-CSCF's
+	// port_ps (RemotePortS per 3GPP TS 33.203). Use RemotePortS, not RemotePortC.
+	remotePortS := state.ipsecPolicy.RemotePortS
+	if remotePortS <= 0 && state.selectedOffer != nil {
+		remotePortS = state.selectedOffer.PortS
 	}
-	if portC <= 0 {
-		portC = remotePort
+	if remotePortS <= 0 {
+		remotePortS = remotePort
 	}
 	localPort := state.ipsecPolicy.LocalPortC
 	if localPort <= 0 {
@@ -222,10 +224,10 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 
 	var rawConn net.Conn
 	if swuTCP != nil {
-		rawConn, err = swuTCP.DialContextTCP(ctx, cfg.LocalIP, localPort, rip, portC)
+		rawConn, err = swuTCP.DialContextTCP(ctx, cfg.LocalIP, localPort, rip, remotePortS)
 	} else {
 		d := net.Dialer{LocalAddr: &net.TCPAddr{IP: cfg.LocalIP, Port: localPort}}
-		rawConn, err = d.DialContext(ctx, "tcp", net.JoinHostPort(rip.String(), strconv.Itoa(portC)))
+		rawConn, err = d.DialContext(ctx, "tcp", net.JoinHostPort(rip.String(), strconv.Itoa(remotePortS)))
 	}
 	if err != nil {
 		return nil, err
