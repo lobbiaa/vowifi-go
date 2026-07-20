@@ -6,14 +6,12 @@ import (
 	"github.com/1239t/vowifi-go/internal/vowifi/policy"
 )
 
-// buildTemplateSecurityClient renders the single preferred Security-Client
-// mechanism used on the initial REGISTER (author register_builder.go).
+// buildTemplateSecurityClient renders all Security-Client mechanisms
+// for the initial REGISTER, matching iniwex format with multiple mechanisms.
 func buildTemplateSecurityClient(template policy.IMSRegisterTemplate, spiC, spiS uint32, portC, portS int) string {
-	mech := preferredSecurityClientMechanism(template)
-	return policy.BuildSecurityClientHeader(
-		policy.IMSRegisterTemplate{SecurityClientMechanisms: []policy.IPSec3GPPSecurityMechanism{mech}},
-		spiC, spiS, portC, portS,
-	)
+	// Send ALL mechanisms, not just one preferred
+	// This matches iniwex which sends 6 mechanisms comma-separated
+	return policy.BuildSecurityClientHeader(template, spiC, spiS, portC, portS)
 }
 
 // buildFullSecurityClient renders all template mechanisms for sec-agree verify
