@@ -132,15 +132,11 @@ func fillPorts(mech SecurityMechanism) portPair {
 		remoteS = remoteC
 	}
 
-	// Local ports: the UE generates its own protected client/server ports
-	// (announced in Security-Client). For now, reuse a shifted version of
-	// the remote ports to avoid ephemeral conflicts. Proper implementation
-	// should allocate fresh ephemeral ports and announce them in Security-Client.
-	localC := remoteC + 1000
-	if localC > 65535 {
-		localC = 40000
-	}
-	localS := localC + 1
+	// Local ports: the UE announces these in Security-Client and must bind to them.
+	// register_session.go hardcodes portC=5064, portS=5063 at initialization.
+	// Use the same values here so the actual bind matches what was announced.
+	localC := 5064
+	localS := 5063
 
 	return portPair{
 		localC:  localC,

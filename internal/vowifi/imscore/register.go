@@ -183,8 +183,10 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 	if err != nil {
 		return err
 	}
-	state.portC = pol.LocalPortC
-	state.portS = pol.LocalPortS
+	// Do NOT overwrite state.portC/portS here. They were initialized to 5064/5063
+	// in newRegisterSession and announced in Security-Client. The policy's LocalPortC/LocalPortS
+	// should match those values (fillPorts hardcodes them), so overwriting is redundant
+	// and risks mismatch if fillPorts changes. Keep state.portC/portS stable.
 	transport, err := ipsec3gpp.NewTransport(pol)
 	if err != nil {
 		return err
