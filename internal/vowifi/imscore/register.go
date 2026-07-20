@@ -3,6 +3,7 @@ package imscore
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -496,11 +497,28 @@ func decodeChallengeNonce(nonce string) ([]byte, error) {
 	if trimmed == "" {
 		return nil, fmt.Errorf("empty nonce")
 	}
+
+	// Try hex first (most common)
 	if len(trimmed)%2 == 0 {
 		if raw, err := hex.DecodeString(trimmed); err == nil {
 			return raw, nil
 		}
 	}
+
+	// Try base64 (O2 Germany uses this)
+	if raw, err := base64.StdEncoding.DecodeString(trimmed); err == nil {
+		return raw, nil
+	}
+
+	// Try base64 with padding
+	padded := trimmed
+	for len(padded)%4 != 0 {
+		padded += "="
+	}
+	if raw, err := base64.StdEncoding.DecodeString(padded); err == nil {
+		return raw, nil
+	}
+
 	return nil, fmt.Errorf("unsupported nonce encoding")
 }
 
