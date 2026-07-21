@@ -40,8 +40,14 @@ func (s *Service) Start(ctx context.Context) error {
 
 	swu, err := s.resolveSWUDialer()
 	if err != nil {
+		logger.Warn("resolveSWUDialer failed",
+			logger.String("trace_id", s.cfg.TraceID),
+			logger.String("error", err.Error()))
 		return err
 	}
+	logger.Info("Service.Start assigning swu",
+		logger.String("trace_id", s.cfg.TraceID),
+		logger.Bool("swu_is_nil", swu == nil))
 	s.swu = swu
 
 	lifecycleCtx, cancel := context.WithCancel(ctx)
@@ -103,10 +109,24 @@ func (s *Service) resolveSWUDialer() (voiceclient.SWUTCPDialer, error) {
 	}
 	if us, ok := s.network.(*UserspaceIMSNetwork); ok && us != nil {
 		if dialer := us.SWUDialer(); dialer != nil {
+			logger.Info("resolveSWUDialer using UserspaceIMSNetwork dialer",
+				logger.String("trace_id", s.cfg.TraceID),
+				logger.Bool("dialer_is_nil", dialer == nil))
 			return dialer, nil
 		}
+		logger.Info("resolveSWUDialer UserspaceIMSNetwork has nil dialer, falling back to newSWUNetstack",
+			logger.String("trace_id", s.cfg.TraceID))
+	} else {
+		logger.Info("resolveSWUDialer network is not UserspaceIMSNetwork, calling newSWUNetstack",
+			logger.String("trace_id", s.cfg.TraceID),
+			logger.Bool("network_is_nil", s.network == nil))
 	}
-	return newSWUNetstack(s.cfg.LocalIP, s.cfg.Dataplane)
+	dialer, err := newSWUNetstack(s.cfg.LocalIP, s.cfg.Dataplane)
+	logger.Info("resolveSWUDialer newSWUNetstack result",
+		logger.String("trace_id", s.cfg.TraceID),
+		logger.Bool("dialer_is_nil", dialer == nil),
+		logger.String("error", fmt.Sprintf("%v", err)))
+	return dialer, err
 }
 
 func (s *Service) logTCPWriterLoop(ctx context.Context, conn net.Conn) {
