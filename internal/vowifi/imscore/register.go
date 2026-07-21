@@ -231,16 +231,51 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 		logger.Int("remote_port_s", remotePortS),
 		logger.Bool("has_swutcp", swuTCP != nil))
 
+	logger.Info("dialSecureRegisterConn checking state",
+		logger.String("trace_id", cfg.TraceID),
+		logger.Bool("transport_nil", state.transport == nil),
+		logger.Bool("policy_local_ip_nil", state.ipsecPolicy.LocalIP == nil))
+
 	var rawConn net.Conn
+	var err error
 	if swuTCP != nil {
 		rawConn, err = swuTCP.DialContextTCP(ctx, cfg.LocalIP, localPort, rip, remotePortS)
+		if err != nil {
+			logger.Warn("secure dial via swuTCP failed",
+				logger.String("trace_id", cfg.TraceID),
+				logger.String("local_ip", cfg.LocalIP.String()),
+				logger.Int("local_port", localPort),
+				logger.String("remote_ip", rip.String()),
+				logger.Int("remote_port", remotePortS),
+				logger.String("error", err.Error()))
+		}
 	} else {
 		d := net.Dialer{LocalAddr: &net.TCPAddr{IP: cfg.LocalIP, Port: localPort}}
-		rawConn, err = d.DialContext(ctx, "tcp", net.JoinHostPort(rip.String(), strconv.Itoa(remotePortS)))
+		target := net.JoinHostPort(rip.String(), strconv.Itoa(remotePortS))
+		logger.Info("secure dial using net.Dialer (TUN mode)",
+			logger.String("trace_id", cfg.TraceID),
+			logger.String("local_addr", d.LocalAddr.String()),
+			logger.String("target", target))
+		rawConn, err = d.DialContext(ctx, "tcp", target)
+		if err != nil {
+			logger.Warn("secure dial via net.Dialer failed",
+				logger.String("trace_id", cfg.TraceID),
+				logger.String("local_addr", d.LocalAddr.String()),
+				logger.String("target", target),
+				logger.String("error", err.Error()))
+		}
 	}
 	if err != nil {
+		logger.Warn("dialSecureRegisterConn failed",
+			logger.String("trace_id", cfg.TraceID),
+			logger.Err(err))
 		return nil, err
 	}
+	logger.Info("dialSecureRegisterConn TCP connection established, wrapping with ESP",
+		logger.String("trace_id", cfg.TraceID),
+		logger.String("local_addr", rawConn.LocalAddr().String()),
+		logger.String("remote_addr", rawConn.RemoteAddr().String()),
+		logger.Bool("transport_nil", state.transport == nil))
 	return ipsec3gpp.WrapSecureChannel(rawConn, state.transport, state.ipsecPolicy), nil
 }
 
