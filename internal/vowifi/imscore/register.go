@@ -237,7 +237,6 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 		logger.Bool("policy_local_ip_nil", state.ipsecPolicy.LocalIP == nil))
 
 	var rawConn net.Conn
-	var err error
 	if swuTCP != nil {
 		rawConn, err = swuTCP.DialContextTCP(ctx, cfg.LocalIP, localPort, rip, remotePortS)
 		if err != nil {
