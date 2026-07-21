@@ -224,6 +224,13 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 		localPort = state.portC
 	}
 
+	logger.Info("dialSecureRegisterConn attempting secure dial",
+		logger.String("local_ip", cfg.LocalIP.String()),
+		logger.Int("local_port", localPort),
+		logger.String("remote_ip", rip.String()),
+		logger.Int("remote_port_s", remotePortS),
+		logger.Bool("has_swutcp", swuTCP != nil))
+
 	var rawConn net.Conn
 	if swuTCP != nil {
 		rawConn, err = swuTCP.DialContextTCP(ctx, cfg.LocalIP, localPort, rip, remotePortS)
