@@ -614,12 +614,18 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		return
 	}
 
+	// Extract IMSESPInstaller if available
+	var imsESPInstaller voiceclient.IMSESPInstaller
+	if installer, ok := dataplane.(voiceclient.IMSESPInstaller); ok {
+		imsESPInstaller = installer
+	}
+
 	voiceCfg := voiceclient.Config{
 		DeviceID:            i.deviceID,
 		TraceID:             i.traceID,
 		LocalIP:             localIP,
 		Dataplane:           dataplane,
-		IMSESPInstaller:     dataplane,
+		IMSESPInstaller:     imsESPInstaller,
 		PCSCFAddr:           pcscfAddr,
 		RegistrarCandidates: pcscfCandidates,
 		Realm:         i.imsRealm,
