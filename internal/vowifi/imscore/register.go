@@ -193,6 +193,31 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 	}
 	state.ipsecPolicy = pol
 	state.transport = transport
+
+	// Install IMS ESP policy in SWU session for double-encapsulation
+	if cfg.IMSESPInstaller != nil {
+		if err := cfg.IMSESPInstaller.InstallIMSESPPolicy(
+			rip,
+			selected.PortC,
+			selected.PortS,
+			selected.SPIC,
+			selected.SPIS,
+			selected.Alg,
+			selected.EAlg,
+			state.ck,
+			state.ik,
+		); err != nil {
+			return fmt.Errorf("install IMS ESP policy in SWU: %w", err)
+		}
+		logger.Info("IMS ESP policy installed in SWU session",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+			logger.String("remote_ip", rip.String()),
+			logger.Int("port_c", selected.PortC),
+			logger.Int("port_s", selected.PortS),
+			logger.Uint32("spi_c", selected.SPIC),
+			logger.Uint32("spi_s", selected.SPIS))
+	}
+
 	return nil
 }
 
@@ -219,9 +244,17 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 	if remotePortS <= 0 {
 		remotePortS = remotePort
 	}
-	localPort := state.ipsecPolicy.LocalPortC
-	if localPort <= 0 {
-		localPort = state.portC
+	// For TCP connections to port-s (authenticated REGISTER), the source port
+	// should be ephemeral (kernel-assigned), NOT port-c. port-c is used by
+	// P-CSCF when it initiates connections back to the UE.
+	// Set localPort=0 to let kernel assign ephemeral port in TUN mode.
+	localPort := 0
+	if swuTCP != nil {
+		// gVisor netstack mode may need explicit port binding
+		localPort = state.ipsecPolicy.LocalPortC
+		if localPort <= 0 {
+			localPort = state.portC
+		}
 	}
 
 	logger.Info("dialSecureRegisterConn attempting secure dial",

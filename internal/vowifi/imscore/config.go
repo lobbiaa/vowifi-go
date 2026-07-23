@@ -9,6 +9,13 @@ import (
 	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
 
+// IMSESPInstaller provides the ability to install IMS ESP policy for double-encapsulation.
+type IMSESPInstaller interface {
+	InstallIMSESPPolicy(remoteIP net.IP, remotePortC, remotePortS int,
+		spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error
+}
+
+
 // Config configures the RE-based imscore IMS register + messaging service.
 type Config struct {
 	DeviceID string
@@ -16,6 +23,8 @@ type Config struct {
 
 	LocalIP   net.IP
 	Dataplane voiceclient.PacketDataplane
+	// IMSESPInstaller provides access to install IMS ESP policy for double-encapsulation
+	IMSESPInstaller IMSESPInstaller
 	PCSCFAddr string
 	// TransportPCSCFAddr overrides the TCP destination for REGISTER when the
 	// logical registrar (PCSCFAddr) is the UE inner IPv6 and userspace netstack
