@@ -615,9 +615,13 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 	}
 
 	// Extract IMSESPInstaller if available
-	var imsESPInstaller voiceclient.IMSESPInstaller
-	if installer, ok := dataplane.(voiceclient.IMSESPInstaller); ok {
-		imsESPInstaller = installer
+	type imsESPInstaller interface {
+		InstallIMSESPPolicy(remoteIP net.IP, remotePortC, remotePortS int,
+			spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error
+	}
+	var installer imsESPInstaller
+	if inst, ok := dataplane.(imsESPInstaller); ok {
+		installer = inst
 	}
 
 	voiceCfg := voiceclient.Config{
@@ -625,7 +629,7 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		TraceID:             i.traceID,
 		LocalIP:             localIP,
 		Dataplane:           dataplane,
-		IMSESPInstaller:     imsESPInstaller,
+		IMSESPInstaller:     installer,
 		PCSCFAddr:           pcscfAddr,
 		RegistrarCandidates: pcscfCandidates,
 		Realm:         i.imsRealm,
