@@ -18,9 +18,19 @@ import (
 	swusim "github.com/1239t/vowifi-go/engine/sim"
 )
 
-// swuSessionWrapper implements imscore.IMSESPInstaller interface
+// swuSessionWrapper implements both swuInnerDataplane and imscore.IMSESPInstaller interfaces
 type swuSessionWrapper struct {
 	session swuInnerDataplane
+}
+
+// SendInnerPacket delegates to the underlying session
+func (w *swuSessionWrapper) SendInnerPacket(packet []byte) error {
+	return w.session.SendInnerPacket(packet)
+}
+
+// InnerPackets delegates to the underlying session
+func (w *swuSessionWrapper) InnerPackets() <-chan []byte {
+	return w.session.InnerPackets()
 }
 
 // InstallIMSESPPolicy installs IMS ESP policy in the underlying swu.Session
