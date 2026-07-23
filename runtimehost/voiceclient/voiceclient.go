@@ -62,6 +62,13 @@ type Config struct {
 	// tunnel IP on the host kernel.
 	Dataplane PacketDataplane
 
+	// IMSESPInstaller provides access to install IMS ESP policy for double-encapsulation.
+	// When present, enables IMS ESP (3GPP TS 33.203) for authenticated SIP traffic.
+	IMSESPInstaller interface {
+		InstallIMSESPPolicy(remoteIP net.IP, remotePortC, remotePortS int,
+			spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error
+	}
+
 	// LocalPort is the port to listen on at LocalIP. 0 defaults to 5060.
 	LocalPort int
 

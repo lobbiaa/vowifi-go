@@ -18,6 +18,25 @@ import (
 	swusim "github.com/1239t/vowifi-go/engine/sim"
 )
 
+// swuSessionWrapper implements imscore.IMSESPInstaller interface
+type swuSessionWrapper struct {
+	session swuInnerDataplane
+}
+
+// InstallIMSESPPolicy installs IMS ESP policy in the underlying swu.Session
+func (w *swuSessionWrapper) InstallIMSESPPolicy(
+	remoteIP net.IP, remotePortC, remotePortS int,
+	spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error {
+
+	// Type assert to access the underlying *externalswu.Session
+	if sess, ok := w.session.(*externalswu.Session); ok {
+		return sess.InstallIMSESPPolicy(remoteIP, remotePortC, remotePortS,
+			spiC, spiS, authAlg, encAlg, ck, ik)
+	}
+	return fmt.Errorf("swuSessionWrapper: underlying session does not support IMS ESP")
+}
+
+
 type externalSIMAdapter struct {
 	inner SIMAdapter
 }
@@ -160,13 +179,13 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 			if !lastSnap.Established || !snapshotHasLocalIP(lastSnap) {
 				return swuSnapshot{}, nil, nil, nil, fmt.Errorf("SWu tunnel finished without usable Child SA; last_snapshot=%s", formatSWuSnapshot(lastSnap))
 			}
-			return lastSnap, preferTunnelLocalIP(lastSnap), session, mobike, nil
+			return lastSnap, preferTunnelLocalIP(lastSnap), &swuSessionWrapper{session: session}, mobike, nil
 		case <-readyCh:
 			lastSnap = fromExternalSnapshot(session.Snapshot())
 			if !lastSnap.Established || !snapshotHasLocalIP(lastSnap) {
 				return swuSnapshot{}, nil, nil, nil, fmt.Errorf("SWu dataplane reported ready without usable tunnel IP; last_snapshot=%s", formatSWuSnapshot(lastSnap))
 			}
-			return lastSnap, preferTunnelLocalIP(lastSnap), session, mobike, nil
+			return lastSnap, preferTunnelLocalIP(lastSnap), &swuSessionWrapper{session: session}, mobike, nil
 		case <-deadline.C:
 			return swuSnapshot{}, nil, nil, nil, fmt.Errorf("SWu tunnel timed out waiting for Child SA; last_snapshot=%s", formatSWuSnapshot(lastSnap))
 		case <-ticker.C:

@@ -184,6 +184,7 @@ func ConfigFromVoice(v voiceclient.Config, template policy.IMSRegisterTemplate) 
 		TraceID:               v.TraceID,
 		LocalIP:               v.LocalIP,
 		Dataplane:             v.Dataplane,
+		IMSESPInstaller:       v.IMSESPInstaller,
 		PCSCFAddr:             v.PCSCFAddr,
 		RegistrarCandidates:   v.RegistrarCandidates,
 		Realm:                 v.Realm,

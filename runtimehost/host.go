@@ -619,6 +619,7 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		TraceID:             i.traceID,
 		LocalIP:             localIP,
 		Dataplane:           dataplane,
+		IMSESPInstaller:     dataplane,
 		PCSCFAddr:           pcscfAddr,
 		RegistrarCandidates: pcscfCandidates,
 		Realm:         i.imsRealm,
