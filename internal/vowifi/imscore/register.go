@@ -256,17 +256,15 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 	if remotePortS <= 0 {
 		remotePortS = remotePort
 	}
-	// For TCP connections to port-s (authenticated REGISTER), the source port
-	// should be ephemeral (kernel-assigned), NOT port-c. port-c is used by
-	// P-CSCF when it initiates connections back to the UE.
-	// Set localPort=0 to let kernel assign ephemeral port in TUN mode.
-	localPort := 0
-	if swuTCP != nil {
-		// gVisor netstack mode may need explicit port binding
-		localPort = state.ipsecPolicy.LocalPortC
-		if localPort <= 0 {
-			localPort = state.portC
-		}
+	// IMPORTANT: The TCP source port MUST match port-c declared in Security-Client
+	// header. P-CSCF verifies this as part of IMS ESP integrity check.
+	// Use port-c as the local port for all TCP connections (both netstack and kernel).
+	localPort := state.ipsecPolicy.LocalPortC
+	if localPort <= 0 {
+		localPort = state.portC
+	}
+	if localPort <= 0 {
+		return nil, fmt.Errorf("dialSecureRegisterConn: port-c not available in state")
 	}
 
 	logger.Info("dialSecureRegisterConn attempting secure dial",
