@@ -48,6 +48,10 @@ type StartSessionInput struct {
 	TraceID               string
 	LocalIP               net.IP
 	Dataplane             voiceclient.PacketDataplane
+	IMSESPInstaller       interface {
+		InstallIMSESPPolicy(remoteIP net.IP, remotePortC, remotePortS int,
+			spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error
+	}
 	RegistrarCandidates   []string
 	AKA                   sim.AKAProvider
 	DeliveryStore         messaging.DeliveryStore
@@ -114,6 +118,7 @@ func internalConfigFromIMS(ims IMSConfig, in StartSessionInput) Config {
 		TraceID:               strings.TrimSpace(in.TraceID),
 		LocalIP:               in.LocalIP,
 		Dataplane:             in.Dataplane,
+		IMSESPInstaller:       in.IMSESPInstaller,
 		PCSCFAddr:             pcscf,
 		RegistrarCandidates:   append([]string(nil), in.RegistrarCandidates...),
 		Realm:                 strings.TrimSpace(ims.Realm),

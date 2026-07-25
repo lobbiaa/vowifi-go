@@ -84,6 +84,7 @@ func Dial(ctx context.Context, cfg Config) (*Service, error) {
 		TraceID:               cfg.TraceID,
 		LocalIP:               cfg.LocalIP,
 		Dataplane:             cfg.Dataplane,
+		IMSESPInstaller:       cfg.IMSESPInstaller,
 		RegistrarCandidates:   cfg.RegistrarCandidates,
 		AKA:                   cfg.AKA,
 		DeliveryStore:         cfg.DeliveryStore,

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/1239t/swu-go/pkg/logger"
 	swusim "github.com/1239t/vowifi-go/engine/sim"
 	"github.com/1239t/vowifi-go/internal/vowifi/imscore"
 	"github.com/1239t/vowifi-go/internal/vowifi/policy"
@@ -620,9 +621,26 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 			spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error
 	}
 	var installer imsESPInstaller
+
+	logger.Info("Extracting IMSESPInstaller from dataplane",
+		logger.String("device_id", i.deviceID),
+		logger.Bool("dataplane_is_nil", dataplane == nil),
+		logger.String("dataplane_type", fmt.Sprintf("%T", dataplane)))
+
 	if inst, ok := dataplane.(imsESPInstaller); ok {
 		installer = inst
+		logger.Info("IMSESPInstaller extracted successfully",
+			logger.String("device_id", i.deviceID))
+	} else {
+		logger.Warn("Failed to extract IMSESPInstaller from dataplane",
+			logger.String("device_id", i.deviceID),
+			logger.Bool("dataplane_is_nil", dataplane == nil),
+			logger.String("dataplane_type", fmt.Sprintf("%T", dataplane)))
 	}
+
+	logger.Info("Before creating voiceCfg",
+		logger.String("device_id", i.deviceID),
+		logger.Bool("installer_is_nil", installer == nil))
 
 	voiceCfg := voiceclient.Config{
 		DeviceID:            i.deviceID,
@@ -675,6 +693,7 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		TraceID:               i.traceID,
 		LocalIP:               localIP,
 		Dataplane:             dataplane,
+		IMSESPInstaller:       installer,
 		RegistrarCandidates:   pcscfCandidates,
 		AKA:                   i.akaProvider,
 		DeliveryStore:         i.deliveryStore,

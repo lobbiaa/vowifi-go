@@ -38,11 +38,26 @@ func (w *swuSessionWrapper) InstallIMSESPPolicy(
 	remoteIP net.IP, remotePortC, remotePortS int,
 	spiC, spiS uint32, authAlg, encAlg string, ck, ik []byte) error {
 
+	logger.Info("swuSessionWrapper.InstallIMSESPPolicy called",
+		logger.Bool("wrapper_is_nil", w == nil),
+		logger.Bool("session_is_nil", w != nil && w.session == nil),
+		logger.String("session_type", func() string {
+			if w == nil || w.session == nil {
+				return "nil"
+			}
+			return fmt.Sprintf("%T", w.session)
+		}()))
+
 	// Type assert to access the underlying *externalswu.Session
 	if sess, ok := w.session.(*externalswu.Session); ok {
+		logger.Info("swuSessionWrapper: type assertion succeeded, calling underlying InstallIMSESPPolicy",
+			logger.String("remote_ip", remoteIP.String()),
+			logger.Int("remote_port_s", remotePortS))
 		return sess.InstallIMSESPPolicy(remoteIP, remotePortC, remotePortS,
 			spiC, spiS, authAlg, encAlg, ck, ik)
 	}
+	logger.Warn("swuSessionWrapper: type assertion to *externalswu.Session failed",
+		logger.String("actual_type", fmt.Sprintf("%T", w.session)))
 	return fmt.Errorf("swuSessionWrapper: underlying session does not support IMS ESP")
 }
 
@@ -119,16 +134,18 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 	}
 
 	cfg := &externalswu.Config{
-		EpDGAddr:      epdgIP,
-		EpDGPort:      uint16(port),
-		APN:           "ims",
-		LocalAddr:     localIPStr,
-		SIM:           externalSIMAdapter{inner: req.SIM},
-		EnableDriver:  true,
-		DataplaneMode: externalDataplaneMode(req.Dataplane.Mode),
-		MCC:           mcc,
-		MNC:           mnc,
-		LocalPort:     0,
+		EpDGAddr:              epdgIP,
+		EpDGPort:              uint16(port),
+		APN:                   "ims",
+		LocalAddr:             localIPStr,
+		SIM:                   externalSIMAdapter{inner: req.SIM},
+		EnableDriver:          true,
+		DataplaneMode:         externalDataplaneMode(req.Dataplane.Mode),
+		MCC:                   mcc,
+		MNC:                   mnc,
+		LocalPort:             0,
+		EnableWiresharkKeyLog: true,
+		WiresharkKeyLogPath:   "/app/logs/wireshark_keys.txt",
 	}
 
 	fmt.Printf("[O2-DEBUG] Calling applySimAdminSWuProfile: MCC=%s MNC=%s key=%s\n",

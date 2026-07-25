@@ -195,7 +195,16 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 	state.transport = transport
 
 	// Install IMS ESP policy in SWU session for double-encapsulation
+	logger.Info("installIPSecFromChallenge checking IMSESPInstaller",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.Bool("installer_is_nil", cfg.IMSESPInstaller == nil))
+
 	if cfg.IMSESPInstaller != nil {
+		logger.Info("installIPSecFromChallenge calling InstallIMSESPPolicy",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+			logger.String("remote_ip", rip.String()),
+			logger.Int("port_s", selected.PortS))
+
 		if err := cfg.IMSESPInstaller.InstallIMSESPPolicy(
 			rip,
 			selected.PortC,
@@ -216,6 +225,9 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 			logger.Int("port_s", selected.PortS),
 			logger.Uint32("spi_c", selected.SPIC),
 			logger.Uint32("spi_s", selected.SPIS))
+	} else {
+		logger.Warn("installIPSecFromChallenge: IMSESPInstaller is nil, IMS ESP will NOT be applied",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)))
 	}
 
 	return nil
