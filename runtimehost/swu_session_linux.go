@@ -146,6 +146,7 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 		LocalPort:             0,
 		EnableWiresharkKeyLog: true,
 		WiresharkKeyLogPath:   "/app/logs/wireshark_keys.txt",
+		EnableIMSESPXFRM:      true, // Enable kernel XFRM for IMS ESP
 	}
 
 	fmt.Printf("[O2-DEBUG] Calling applySimAdminSWuProfile: MCC=%s MNC=%s key=%s\n",
