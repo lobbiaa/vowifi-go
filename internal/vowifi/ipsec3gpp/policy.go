@@ -48,13 +48,15 @@ type TransportStats struct {
 
 // PolicyInput is the minimum set of inputs required to build a Policy.
 type PolicyInput struct {
-	LocalIP  net.IP
-	RemoteIP net.IP
-	Mech     SecurityMechanism
-	CK       []byte
-	IK       []byte
-	AuthAlg  string
-	EncAlg   string
+	LocalIP   net.IP
+	RemoteIP  net.IP
+	Mech      SecurityMechanism
+	CK        []byte
+	IK        []byte
+	AuthAlg   string
+	EncAlg    string
+	LocalPortC int // UE's local port-c (announced in Security-Client)
+	LocalPortS int // UE's local port-s (announced in Security-Client)
 }
 
 // NewPolicy builds a Policy from negotiated Security-Server parameters and AKA keys.
@@ -80,7 +82,7 @@ func NewPolicy(in PolicyInput) (Policy, error) {
 		return Policy{}, errors.New("ipsec3gpp: spi-c and spi-s are required")
 	}
 
-	ports := fillPorts(in.Mech)
+	ports := fillPorts(in.Mech, in.LocalPortC, in.LocalPortS)
 	ck := append([]byte(nil), in.CK...)
 	ik := append([]byte(nil), in.IK...)
 
@@ -121,7 +123,7 @@ type portPair struct {
 	localC, localS, remoteC, remoteS int
 }
 
-func fillPorts(mech SecurityMechanism) portPair {
+func fillPorts(mech SecurityMechanism, localPortC, localPortS int) portPair {
 	// mech.PortC/PortS come from Security-Server (P-CSCF's announced ports).
 	// These are the REMOTE ports the UE will connect to.
 	remoteC, remoteS := mech.PortC, mech.PortS
@@ -132,11 +134,16 @@ func fillPorts(mech SecurityMechanism) portPair {
 		remoteS = remoteC
 	}
 
-	// Local ports: the UE announces these in Security-Client and must bind to them.
-	// register_session.go hardcodes portC=5064, portS=5063 at initialization.
-	// Use the same values here so the actual bind matches what was announced.
-	localC := 5064
-	localS := 5063
+	// Local ports: passed from register_session which allocates random high ports.
+	// Use defaults only if not provided (backward compatibility).
+	localC := localPortC
+	localS := localPortS
+	if localC <= 0 {
+		localC = 5064
+	}
+	if localS <= 0 {
+		localS = 5063
+	}
 
 	return portPair{
 		localC:  localC,

@@ -3,6 +3,7 @@ package imscore
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -13,6 +14,12 @@ import (
 
 	"github.com/1239t/vowifi-go/runtimehost/voiceclient"
 )
+
+// allocateRandomHighPort returns a random port in the range 40000-50000
+// to avoid conflicts with well-known ports and match real UE behavior
+func allocateRandomHighPort() int {
+	return 40000 + rand.Intn(10000)
+}
 
 func resolveStableSIPInstance(cfg Config) string {
 	if urn := strings.TrimSpace(cfg.SIPInstanceURN); urn != "" {
@@ -48,8 +55,8 @@ func newRegisterSession(cfg Config, swu voiceclient.SWUTCPDialer, network IMSNet
 	state := &registerState{
 		spiC:        randomNonZeroUint32(),
 		spiS:        randomNonZeroUint32(),
-		portC:       5064,
-		portS:       5063,
+		portC:       allocateRandomHighPort(),
+		portS:       allocateRandomHighPort(),
 		sipInstance: resolveStableSIPInstance(cfg),
 	}
 	localPort := registerAttemptLocalPort(cfg, attemptIndex)

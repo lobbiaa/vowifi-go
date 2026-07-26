@@ -174,11 +174,13 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 		PortS: selected.PortS,
 	}
 	pol, err := ipsec3gpp.NewPolicy(ipsec3gpp.PolicyInput{
-		LocalIP:  cfg.LocalIP,
-		RemoteIP: rip,
-		Mech:     mech,
-		CK:       state.ck,
-		IK:       state.ik,
+		LocalIP:    cfg.LocalIP,
+		RemoteIP:   rip,
+		Mech:       mech,
+		CK:         state.ck,
+		IK:         state.ik,
+		LocalPortC: state.portC,
+		LocalPortS: state.portS,
 	})
 	if err != nil {
 		return err
