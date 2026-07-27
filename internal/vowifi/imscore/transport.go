@@ -3,6 +3,7 @@ package imscore
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -92,39 +93,60 @@ func newSecureRegisterSIPStack(cfg Config, conn *ipsec3gpp.SecureChannelConn) (*
 
 func newSIPStack(cfg Config, dialer *fixedConnDialer, swu voiceclient.SWUTCPDialer, localPort int) (*sipgo.UserAgent, *sipgo.Client, error) {
 	installSIPTrace(cfg.TraceID, cfg.DeviceID)
+
+	// [CRITICAL FIX] Use DialContext field (lobbiaa/sipgo fork) to inject custom dialer
+	// This allows us to return pre-established secure connection (6060) instead of creating new one (5060)
+	tcpTransport := &sip.TransportTCP{}
+
+	// Set DialContext to check fixedConnDialer first, then swu, then fallback to standard dial
+	tcpTransport.DialContext = func(ctx context.Context, laddr net.Addr, raddr net.Addr) (net.Conn, error) {
+		log.Printf("[DialContext] called with laddr=%v raddr=%v dialer=%v swu=%v", laddr, raddr, dialer != nil, swu != nil)
+
+		// Priority 1: Check if we have a pre-established secure connection (IMS ESP case)
+		if dialer != nil {
+			conn, err := dialer.dial(ctx, laddr, raddr)
+			log.Printf("[DialContext] fixedConnDialer.dial returned conn=%v err=%v", conn != nil, err)
+			if err == nil && conn != nil {
+				log.Printf("[DialContext] using pre-established secure connection: %v -> %v", conn.LocalAddr(), conn.RemoteAddr())
+				return conn, nil
+			}
+		}
+
+		// Priority 2: Use swu tunnel if available
+		if swu != nil {
+			tcpAddr, ok := raddr.(*net.TCPAddr)
+			if !ok || tcpAddr == nil {
+				return nil, fmt.Errorf("imscore: invalid TCP remote addr %v", raddr)
+			}
+			port := localPort
+			if localTCP, ok := laddr.(*net.TCPAddr); ok && localTCP != nil && localTCP.Port > 0 {
+				port = localTCP.Port
+			}
+			transportAddr := effectiveTransportAddr(cfg)
+			transportHost, transportPortStr, err := net.SplitHostPort(transportAddr)
+			if err != nil {
+				return nil, err
+			}
+			transportPort, err := strconv.Atoi(transportPortStr)
+			if err != nil {
+				return nil, err
+			}
+			transportIP := net.ParseIP(transportHost)
+			if transportIP == nil {
+				return nil, fmt.Errorf("imscore: invalid transport P-CSCF %q", transportAddr)
+			}
+			return swu.DialContextTCP(ctx, cfg.LocalIP, port, transportIP, transportPort)
+		}
+
+		// Priority 3: Standard OS dial
+		return net.DialTimeout("tcp", raddr.String(), registerTransactionTimeout)
+	}
+
 	uaOpts := []sipgo.UserAgentOption{
 		sipgo.WithUserAgent(cfg.UserAgent),
 		sipgo.WithUserAgentTransportLayerOptions(
 			sip.WithTransportLayerTransports(sip.TransportsConfig{
-				TCP: &sip.TransportTCP{
-					DialContext: func(ctx context.Context, laddr net.Addr, raddr net.Addr) (net.Conn, error) {
-						if swu != nil {
-							tcpAddr, ok := raddr.(*net.TCPAddr)
-							if !ok || tcpAddr == nil {
-								return nil, fmt.Errorf("imscore: invalid TCP remote addr %v", raddr)
-							}
-							port := localPort
-							if localTCP, ok := laddr.(*net.TCPAddr); ok && localTCP != nil && localTCP.Port > 0 {
-								port = localTCP.Port
-							}
-							transportAddr := effectiveTransportAddr(cfg)
-							transportHost, transportPortStr, err := net.SplitHostPort(transportAddr)
-							if err != nil {
-								return nil, err
-							}
-							transportPort, err := strconv.Atoi(transportPortStr)
-							if err != nil {
-								return nil, err
-							}
-							transportIP := net.ParseIP(transportHost)
-							if transportIP == nil {
-								return nil, fmt.Errorf("imscore: invalid transport P-CSCF %q", transportAddr)
-							}
-							return swu.DialContextTCP(ctx, cfg.LocalIP, port, transportIP, transportPort)
-						}
-						return net.DialTimeout("tcp", raddr.String(), registerTransactionTimeout)
-					},
-				},
+				TCP: tcpTransport,
 			}),
 		),
 	}

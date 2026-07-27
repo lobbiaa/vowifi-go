@@ -28,10 +28,26 @@ func WrapSecureChannel(conn net.Conn, transport *Transport, policy Policy) *Secu
 	}
 }
 
+// WrapSecureChannelPassthrough creates a passthrough wrapper for kernel XFRM mode.
+// When using kernel XFRM, ESP is handled transparently by the kernel, so we don't
+// need userspace encryption. This wrapper just passes through the raw TCP connection.
+func WrapSecureChannelPassthrough(conn net.Conn) *SecureChannelConn {
+	return &SecureChannelConn{
+		conn:      conn,
+		transport: nil,
+		policy:    Policy{},
+	}
+}
+
 func (c *SecureChannelConn) Read(p []byte) (int, error) {
 	if c == nil || c.conn == nil {
 		return 0, errors.New("ipsec3gpp: secure channel is not ready")
 	}
+	// Passthrough mode for kernel XFRM: just read from raw connection
+	if c.transport == nil {
+		return c.conn.Read(p)
+	}
+	// Userspace ESP mode: decrypt and parse IP/TCP packets
 	for {
 		payload, err := c.readSIPPayload()
 		if err != nil {
@@ -51,9 +67,14 @@ func (c *SecureChannelConn) Read(p []byte) (int, error) {
 }
 
 func (c *SecureChannelConn) Write(p []byte) (int, error) {
-	if c == nil || c.conn == nil || c.transport == nil {
+	if c == nil || c.conn == nil {
 		return 0, errors.New("ipsec3gpp: secure channel is not ready")
 	}
+	// Passthrough mode for kernel XFRM: just write to raw connection
+	if c.transport == nil {
+		return c.conn.Write(p)
+	}
+	// Userspace ESP mode: build IP/TCP packet and encrypt
 	packet, err := buildOutboundTCPPacket(c.policy, p)
 	if err != nil {
 		return 0, err

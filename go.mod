@@ -33,3 +33,9 @@ require (
 
 // Use lobbiaa fork with O2 Germany modp1024 fix
 replace github.com/1239t/swu-go => github.com/lobbiaa/swu-go v0.1.2
+
+// Use accessible netlink fork
+replace github.com/iniwex5/netlink => github.com/lobbiaa/netlink v0.0.0-20260324170529-325c67565c75
+
+// Use lobbiaa sipgo fork with DialContext support for IMS ESP
+replace github.com/emiago/sipgo => github.com/lobbiaa/sipgo v1.4.3-0.20260714081108-a39801afc029

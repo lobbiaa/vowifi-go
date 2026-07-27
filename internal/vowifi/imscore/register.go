@@ -47,6 +47,7 @@ type registerState struct {
 	ipsecPolicy   ipsec3gpp.Policy
 	transport     *ipsec3gpp.Transport
 	secureConn    *ipsec3gpp.SecureChannelConn
+	xfrmManager   interface{ Cleanup() } // XFRM manager for IMS ESP cleanup
 
 	expiresSeconds int
 	verifyHeader   string
@@ -126,11 +127,28 @@ func runSecureAuthenticatedRegister(ctx context.Context, cfg Config, swuTCP voic
 	defer ua.Close()
 	defer secureClient.Close()
 
+	logger.Info("runSecureAuthenticatedRegister: SIP stack created",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.String("secure_conn_local", secureConn.LocalAddr().String()),
+		logger.String("secure_conn_remote", secureConn.RemoteAddr().String()))
+
 	authRes, _, err := buildAuthenticatedRegister(cfg, *state, lastReq, lastRes)
 	if err != nil {
 		_ = secureConn.Close()
 		return nil, err
 	}
+
+	logger.Info("runSecureAuthenticatedRegister: sending authenticated REGISTER",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.String("request_uri", authRes.Recipient.String()),
+		logger.String("destination", authRes.Destination()),
+		logger.String("transport", authRes.Transport()),
+		logger.String("route_header", func() string {
+			if h := authRes.GetHeader("Route"); h != nil {
+				return h.Value()
+			}
+			return "<nil>"
+		}()))
 
 	finalRes, err := doRegisterTransaction(ctx, secureClient, authRes)
 	if err != nil {
@@ -181,14 +199,23 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 		IK:         state.ik,
 		LocalPortC: state.portC,
 		LocalPortS: state.portS,
+		LocalSPIC:  state.spiC, // UE's own spi-c announced in Security-Client
+		LocalSPIS:  state.spiS, // UE's own spi-s announced in Security-Client
 	})
 	if err != nil {
 		return err
 	}
-	// Do NOT overwrite state.portC/portS here. They were initialized to 5064/5063
-	// in newRegisterSession and announced in Security-Client. The policy's LocalPortC/LocalPortS
-	// should match those values (fillPorts hardcodes them), so overwriting is redundant
-	// and risks mismatch if fillPorts changes. Keep state.portC/portS stable.
+
+	// [CRITICAL FIX] Update state SPIs/ports to match what P-CSCF assigned
+	// The initial Security-Client used randomly generated values, but after 401
+	// we MUST use the SPIs/ports from Security-Server response for all subsequent
+	// communication (including the next Security-Client header in authenticated REGISTER)
+	// Without this, we advertise stale SPIs and P-CSCF encrypts with the wrong keys
+	state.spiC = selected.SPIC
+	state.spiS = selected.SPIS
+	state.portC = selected.PortC
+	state.portS = selected.PortS
+
 	transport, err := ipsec3gpp.NewTransport(pol)
 	if err != nil {
 		return err
@@ -196,41 +223,29 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 	state.ipsecPolicy = pol
 	state.transport = transport
 
-	// Install IMS ESP policy in SWU session for double-encapsulation
-	logger.Info("installIPSecFromChallenge checking IMSESPInstaller",
+	// Install IMS ESP using kernel XFRM (replaces user-space ESP)
+	logger.Info("Installing IMS ESP via kernel XFRM",
 		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
-		logger.Bool("installer_is_nil", cfg.IMSESPInstaller == nil))
+		logger.String("local_ip", cfg.LocalIP.String()),
+		logger.String("remote_ip", rip.String()),
+		logger.Int("local_port_c", state.portC),
+		logger.Int("local_port_s", state.portS),
+		logger.Int("remote_port_c", selected.PortC),
+		logger.Int("remote_port_s", selected.PortS),
+		logger.Uint32("local_spi_c", pol.FlowC.InboundSPI),
+		logger.Uint32("local_spi_s", pol.FlowS.InboundSPI),
+		logger.Uint32("remote_spi_c", selected.SPIC),
+		logger.Uint32("remote_spi_s", selected.SPIS))
 
-	if cfg.IMSESPInstaller != nil {
-		logger.Info("installIPSecFromChallenge calling InstallIMSESPPolicy",
-			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
-			logger.String("remote_ip", rip.String()),
-			logger.Int("port_s", selected.PortS))
-
-		if err := cfg.IMSESPInstaller.InstallIMSESPPolicy(
-			rip,
-			selected.PortC,
-			selected.PortS,
-			selected.SPIC,
-			selected.SPIS,
-			selected.Alg,
-			selected.EAlg,
-			state.ck,
-			state.ik,
-		); err != nil {
-			return fmt.Errorf("install IMS ESP policy in SWU: %w", err)
-		}
-		logger.Info("IMS ESP policy installed in SWU session",
-			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
-			logger.String("remote_ip", rip.String()),
-			logger.Int("port_c", selected.PortC),
-			logger.Int("port_s", selected.PortS),
-			logger.Uint32("spi_c", selected.SPIC),
-			logger.Uint32("spi_s", selected.SPIS))
-	} else {
-		logger.Warn("installIPSecFromChallenge: IMSESPInstaller is nil, IMS ESP will NOT be applied",
-			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)))
+	xfrmMgr, err := ipsec3gpp.InstallXFRMDualFlow(pol)
+	if err != nil {
+		return fmt.Errorf("failed to install XFRM IMS ESP: %w", err)
 	}
+	state.xfrmManager = xfrmMgr
+
+	logger.Info("IMS ESP XFRM policies installed successfully",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.String("debug_info", ipsec3gpp.DumpXFRMDebug(pol)))
 
 	return nil
 }
@@ -294,13 +309,25 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 				logger.String("error", err.Error()))
 		}
 	} else {
-		d := net.Dialer{LocalAddr: &net.TCPAddr{IP: cfg.LocalIP, Port: localPort}}
+		// Use tcp6 for IPv6 addresses to ensure proper XFRM matching
+		network := "tcp"
+		if cfg.LocalIP.To4() == nil {
+			network = "tcp6"
+		}
+
+		d := net.Dialer{
+			LocalAddr: &net.TCPAddr{IP: cfg.LocalIP, Port: localPort},
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
 		target := net.JoinHostPort(rip.String(), strconv.Itoa(remotePortS))
-		logger.Info("secure dial using net.Dialer (TUN mode)",
+		logger.Info("secure dial using net.Dialer with XFRM IMS ESP",
 			logger.String("trace_id", cfg.TraceID),
+			logger.String("network", network),
 			logger.String("local_addr", d.LocalAddr.String()),
-			logger.String("target", target))
-		rawConn, err = d.DialContext(ctx, "tcp", target)
+			logger.String("target", target),
+			logger.String("note", "XFRM kernel will apply ESP to matching traffic"))
+		rawConn, err = d.DialContext(ctx, network, target)
 		if err != nil {
 			logger.Warn("secure dial via net.Dialer failed",
 				logger.String("trace_id", cfg.TraceID),
@@ -315,12 +342,17 @@ func dialSecureRegisterConn(ctx context.Context, cfg Config, swuTCP voiceclient.
 			logger.Err(err))
 		return nil, err
 	}
-	logger.Info("dialSecureRegisterConn TCP connection established, wrapping with ESP",
+	logger.Info("dialSecureRegisterConn TCP connection established",
 		logger.String("trace_id", cfg.TraceID),
 		logger.String("local_addr", rawConn.LocalAddr().String()),
 		logger.String("remote_addr", rawConn.RemoteAddr().String()),
-		logger.Bool("transport_nil", state.transport == nil))
-	return ipsec3gpp.WrapSecureChannel(rawConn, state.transport, state.ipsecPolicy), nil
+		logger.String("note", "XFRM handles ESP transparently, returning raw TCP connection"))
+
+	// [CRITICAL FIX] With kernel XFRM, use passthrough wrapper WITHOUT userspace ESP
+	// WrapSecureChannel does userspace ESP encryption which creates fake IP/TCP headers
+	// and conflicts with kernel XFRM. Kernel handles ESP automatically, so we just need
+	// a passthrough wrapper that directly reads/writes to the raw TCP connection.
+	return ipsec3gpp.WrapSecureChannelPassthrough(rawConn), nil
 }
 
 func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Request, prevRes *sip.Response) (*sip.Request, *sip.Request, error) {
@@ -348,6 +380,42 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 	req.RemoveHeader("Via")
 	req.RemoveHeader("Authorization")
 	req.RemoveHeader("Security-Verify")
+
+	// [CRITICAL FIX] Update Contact header to use port-s (secure port)
+	// After IMS ESP is installed, P-CSCF must be able to reach UE on the secure port
+	// The initial REGISTER used port 5060, but authenticated REGISTER must use port-s (6060)
+	req.RemoveHeader("Contact")
+	secureContactPort := state.selectedOffer.PortS
+	if secureContactPort <= 0 {
+		secureContactPort = 6060 // fallback
+	}
+	req.AppendHeader(sip.NewHeader("Contact", buildIMSCoreContact(cfg, state, secureContactPort)))
+
+	// [CRITICAL FIX] Update Route header to use port-s (6060) instead of 5060
+	// After IMS ESP is installed, authenticated REGISTER must be sent to the secure port
+	oldRoute := req.GetHeader("Route")
+	oldRouteValue := ""
+	if oldRoute != nil {
+		oldRouteValue = oldRoute.Value()
+	}
+	req.RemoveHeader("Route")
+	remoteIP := effectiveIPSecRemoteIP(cfg)
+	secureRouteAddr := net.JoinHostPort(remoteIP.String(), fmt.Sprintf("%d", state.selectedOffer.PortS))
+	req.AppendHeader(sip.NewHeader("Route", "<sip:"+secureRouteAddr+";lr>"))
+
+	// [CRITICAL FIX] Override SetDestination to use port-s (6060)
+	// This is what sipgo actually uses to route the TCP connection, not the Route header
+	req.SetDestination(secureRouteAddr)
+	req.SetTransport("TCP")
+
+	logger.Info("buildAuthenticatedRegister Route header and destination updated",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.String("old_route", oldRouteValue),
+		logger.String("new_route", "<sip:"+secureRouteAddr+";lr>"),
+		logger.String("destination", secureRouteAddr),
+		logger.String("remote_ip", remoteIP.String()),
+		logger.Int("port_s", state.selectedOffer.PortS))
+
 	req.AppendHeader(sip.NewHeader("Authorization", authHeader))
 	if state.verifyHeader != "" {
 		req.AppendHeader(sip.NewHeader("Security-Verify", state.verifyHeader))
