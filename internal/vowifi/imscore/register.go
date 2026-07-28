@@ -207,15 +207,15 @@ func installIPSecFromChallenge(cfg Config, state *registerState, res *sip.Respon
 		return err
 	}
 
-	// [CRITICAL FIX] Update state SPIs/ports to match what P-CSCF assigned
-	// The initial Security-Client used randomly generated values, but after 401
-	// we MUST use the SPIs/ports from Security-Server response for all subsequent
-	// communication (including the next Security-Client header in authenticated REGISTER)
-	// Without this, we advertise stale SPIs and P-CSCF encrypts with the wrong keys
+	// [CRITICAL FIX] Update state SPIs to match what P-CSCF assigned
+	// The initial Security-Client used randomly generated SPIs, but after 401
+	// we MUST use the SPIs from Security-Server response for XFRM SA installation
+	// and for the next Security-Client header in authenticated REGISTER.
+	// However, DO NOT update ports - UE continues using its own announced ports
+	// as local binding addresses. Security-Server ports are P-CSCF's remote ports.
 	state.spiC = selected.SPIC
 	state.spiS = selected.SPIS
-	state.portC = selected.PortC
-	state.portS = selected.PortS
+	// Keep state.portC and state.portS unchanged - they are UE's local binding ports
 
 	transport, err := ipsec3gpp.NewTransport(pol)
 	if err != nil {
@@ -623,10 +623,26 @@ func buildIMSCoreContact(cfg Config, state registerState, localPort int) string 
 }
 
 func buildCellularNetworkInfo(cfg Config) string {
-	plmn := strings.TrimSpace(cfg.MCC) + strings.TrimLeft(strings.TrimSpace(cfg.MNC), "0")
-	if plmn == "" {
-		plmn = "00000"
+	// [CRITICAL FIX] PLMN must be exactly 6 digits: MCC (3 digits) + MNC (3 digits)
+	// DO NOT strip leading zeros from MNC - "003" must stay "003", not "3"
+	// Example: MCC=262, MNC=003 → PLMN=262003 (not 2623)
+	mcc := strings.TrimSpace(cfg.MCC)
+	mnc := strings.TrimSpace(cfg.MNC)
+
+	// Pad MCC to 3 digits if needed
+	if len(mcc) < 3 {
+		mcc = fmt.Sprintf("%03s", mcc)
 	}
+	// Pad MNC to 3 digits if needed (keep leading zeros!)
+	if len(mnc) < 3 {
+		mnc = fmt.Sprintf("%03s", mnc)
+	}
+
+	plmn := mcc + mnc
+	if plmn == "" || plmn == "000000" {
+		plmn = "000000"
+	}
+
 	cell := strings.TrimSpace(cfg.CellID)
 	if cell == "" {
 		// [FIX] O2 Germany requires realistic random cell-id after PLMN

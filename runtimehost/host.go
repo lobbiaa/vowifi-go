@@ -16,6 +16,7 @@ import (
 	"github.com/1239t/vowifi-go/internal/vowifi/imscore"
 	"github.com/1239t/vowifi-go/internal/vowifi/policy"
 	"github.com/1239t/vowifi-go/internal/vowifi/runtimecore"
+	"github.com/1239t/vowifi-go/runtimehost/carrier"
 	"github.com/1239t/vowifi-go/runtimehost/identity"
 	"github.com/1239t/vowifi-go/runtimehost/messaging"
 	"github.com/1239t/vowifi-go/runtimehost/transport"
@@ -461,7 +462,19 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 
 	imsPrivateID := eapIdentity
 	imsPublicURI := resolveIMSPublicURI(req.Prepared, imsi)
+
+	// [CRITICAL FIX] Apply carrier-specific IMS REGISTER profile
+	// This allows O2 Germany to use iOS profile, giffgaff to use Xiaomi profile, etc.
+	mcc := strings.TrimSpace(req.Prepared.EffectiveCarrier.MCC)
+	mnc := strings.TrimSpace(req.Prepared.EffectiveCarrier.MNC)
+	carrierProfile := carrier.ResolveIMSRegisterProfile(mcc, mnc)
+
 	registerProfile := req.RegisterProfile.Normalized()
+	// Override with carrier-specific profile if available
+	if carrierProfile.Profile.ContactFeatures != "" {
+		registerProfile = carrierProfile.Profile
+	}
+
 	if voiceclient.UsesIMSIHomeDomainIdentity(registerProfile) {
 		shape := strings.TrimSpace(registerProfile.AuthorizationIdentity)
 		if shape == "" {
@@ -474,6 +487,16 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 	}
 
 	session := runtimecore.BeginSession(toRuntimecoreSessionConfig(req))
+
+	// Apply carrier-specific SIP Instance URN and Register Expiry if provided
+	sipInstanceURN := strings.TrimSpace(req.SIPInstanceURN)
+	if carrierProfile.SIPInstanceURN != "" {
+		sipInstanceURN = carrierProfile.SIPInstanceURN
+	}
+	registerExpiry := req.RegisterExpiry
+	if carrierProfile.RegisterExpiry > 0 {
+		registerExpiry = carrierProfile.RegisterExpiry
+	}
 
 	inst := &Instance{
 		deviceID:      deviceID,
@@ -491,8 +514,8 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 		imsMNC:        strings.TrimSpace(req.Profile.MNC),
 		imsCellID:       strings.TrimSpace(req.CellID),
 		registerProfile: registerProfile,
-		sipInstanceURN:  strings.TrimSpace(req.SIPInstanceURN),
-		registerExpiry:  req.RegisterExpiry,
+		sipInstanceURN:  sipInstanceURN,
+		registerExpiry:  registerExpiry,
 		traceID:         strings.TrimSpace(req.TraceID),
 		pcscfOverride: req.PCSCFAddr,
 		deliveryStore: req.DeliveryStore,
