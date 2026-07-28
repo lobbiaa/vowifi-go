@@ -2,11 +2,12 @@ package imscore
 
 import (
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	// "encoding/base64" // retained for commented-out decodeChallengeNonce
 	// "encoding/hex"    // retained for commented-out decodeChallengeNonce
 	"fmt"
 	"math/big"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -381,13 +382,13 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 	req.RemoveHeader("Authorization")
 	req.RemoveHeader("Security-Verify")
 
-	// [CRITICAL FIX] Update Contact header to use port-s (secure port)
-	// After IMS ESP is installed, P-CSCF must be able to reach UE on the secure port
-	// The initial REGISTER used port 5060, but authenticated REGISTER must use port-s (6060)
+	// [CRITICAL FIX] Update Contact header to use UE's port-s (UE server port)
+	// After IMS ESP is installed, P-CSCF must be able to reach UE on UE's port-s
+	// The initial REGISTER used port 5060, but authenticated REGISTER must use state.portS
 	req.RemoveHeader("Contact")
-	secureContactPort := state.selectedOffer.PortS
+	secureContactPort := state.portS
 	if secureContactPort <= 0 {
-		secureContactPort = 6060 // fallback
+		secureContactPort = 5060 // fallback to default UE port-s
 	}
 	req.AppendHeader(sip.NewHeader("Contact", buildIMSCoreContact(cfg, state, secureContactPort)))
 
@@ -628,9 +629,17 @@ func buildCellularNetworkInfo(cfg Config) string {
 	}
 	cell := strings.TrimSpace(cfg.CellID)
 	if cell == "" {
-		cell = "0000000"
+		// [FIX] O2 Germany requires realistic random cell-id after PLMN
+		// Format: PLMN (6 digits) + random hex (10 digits)
+		// Example: 26200307D0F294E0 = 262003 + 07D0F294E0
+		cell = fmt.Sprintf("%08X%02X", rand.Uint32(), rand.Intn(256))
 	}
-	return fmt.Sprintf("3GPP-E-UTRAN-FDD;utran-cell-id-3gpp=%s%s;cell-info-age=0", plmn, cell)
+
+	// [FIX] O2 Germany requires realistic cell-info-age, not 0
+	// Use random value between 10000-50000 milliseconds
+	cellInfoAge := 10000 + rand.Intn(40000)
+
+	return fmt.Sprintf("3GPP-E-UTRAN-TDD;utran-cell-id-3gpp=%s%s;cell-info-age=%d", plmn, cell, cellInfoAge)
 }
 
 func computeAKAAuth(cfg Config, chal *digest.Challenge, req *sip.Request) (sim.AKAResult, string, error) {
@@ -639,10 +648,18 @@ func computeAKAAuth(cfg Config, chal *digest.Challenge, req *sip.Request) (sim.A
 	// We must NOT call CalculateAKA a second time for the same RAND/AUTN: the
 	// USIM's SQN replay protection would reject it with a sync failure and yield
 	// no CK/IK. Reuse result.AKA instead.
+
+	// [FIX] O2 Germany requires username to be IMSI@ims.mnc003.mcc262.3gppnetwork.org
+	// Extract IMSI from cfg.IMSI (not PrivateID which may have 0 prefix and wrong domain)
+	imsi := strings.TrimSpace(cfg.IMSI)
+	// Remove leading 0 if present
+	imsi = strings.TrimPrefix(imsi, "0")
+	username := imsi + "@" + cfg.HomeDomain
+
 	result, err := simauth.ComputeDigest(cfg.AKA, chal, digest.Options{
 		Method:   req.Method.String(),
-		URI:      req.Recipient.Host,
-		Username: cfg.PrivateID,
+		URI:      "sip:" + cfg.HomeDomain,  // Use full SIP URI
+		Username: username,                  // Use IMSI@HomeDomain format (e.g. 262036013159494@ims.mnc003.mcc262.3gppnetwork.org)
 	})
 	if err != nil {
 		return sim.AKAResult{}, "", err
@@ -737,7 +754,7 @@ func registerAttemptLocalPort(cfg Config, attemptIndex int) int {
 
 func randomEphemeralSIPPort() int {
 	for {
-		n, err := rand.Int(rand.Reader, big.NewInt(50000))
+		n, err := cryptorand.Int(cryptorand.Reader, big.NewInt(50000))
 		if err != nil {
 			return 5062
 		}
@@ -750,7 +767,7 @@ func randomEphemeralSIPPort() int {
 
 func randomNonZeroUint32() uint32 {
 	for {
-		n, err := rand.Int(rand.Reader, big.NewInt(1<<32-1))
+		n, err := cryptorand.Int(cryptorand.Reader, big.NewInt(1<<32-1))
 		if err != nil {
 			return 0xc0ffee01
 		}

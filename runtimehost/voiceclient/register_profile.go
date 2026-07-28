@@ -70,10 +70,10 @@ func SimAdminGBEERegisterProfile() RegisterProfile {
 }
 
 // SimAdminIOSRegisterProfile mirrors SimAdmin iPhone handset disguise (DE O2 / NZ Spark):
-// iphone15,4_like VoWiFi UA, require sec-agree, and IMS home-domain identity.
+// iOS 18.2.1 iPhone 15,4 VoWiFi UA, require sec-agree, and IMS home-domain identity.
 func SimAdminIOSRegisterProfile() RegisterProfile {
 	profile := DefaultGBEERegisterProfile()
-	profile.UserAgent = "iphone15,4_like VoWiFi"
+	profile.UserAgent = "iOS/18.2.1 iPhone (iPhone15,4)"
 	profile.IncludeRequireSecAgree = true
 	profile.InitialAuthorization = "aka_empty_uri_first"
 	profile.AuthorizationIdentity = "imsi_home_domain"
