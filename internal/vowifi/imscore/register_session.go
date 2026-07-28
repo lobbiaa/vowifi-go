@@ -45,9 +45,10 @@ type registerSession struct {
 	phase         registerPhase
 	jitter        bool
 
-	conn     *connRegisterTransport
-	callID   string
-	cseq     uint32
+	conn      *connRegisterTransport
+	callID    string
+	fromTag   string // [FIX] Preserve From tag across initial and authenticated REGISTER
+	cseq      uint32
 	localPort int
 }
 
@@ -323,6 +324,22 @@ func (s *registerSession) registerOnce(ctx context.Context, transport *connRegis
 	if err := s.decorateRegisterRequest(req); err != nil {
 		return nil, err
 	}
+
+	// [CRITICAL FIX] Preserve Call-ID and From tag from initial REGISTER
+	// The authenticated REGISTER must reuse these values to maintain the same dialog
+	if initial && s.callID == "" {
+		if callIDHdr := req.GetHeader("Call-ID"); callIDHdr != nil {
+			s.callID = callIDHdr.Value()
+		}
+		if fromHdr := req.GetHeader("From"); fromHdr != nil {
+			// Extract tag from From header (format: <uri>;tag=xyz)
+			fromValue := fromHdr.Value()
+			if tagIdx := strings.Index(fromValue, ";tag="); tagIdx != -1 {
+				s.fromTag = strings.TrimSpace(fromValue[tagIdx+5:])
+			}
+		}
+	}
+
 	if err := transport.Send(ctx, req); err != nil {
 		return nil, err
 	}
@@ -378,6 +395,13 @@ func (s *registerSession) decorateRegisterRequest(req *sip.Request) error {
 	req.RemoveHeader("Call-ID")
 	req.RemoveHeader("CSeq")
 	req.RemoveHeader("Max-Forwards")
+
+	// [CRITICAL FIX] Reuse From tag from initial REGISTER
+	// The authenticated REGISTER must use the same From tag to maintain dialog
+	if s.fromTag != "" {
+		req.RemoveHeader("From")
+		req.AppendHeader(sip.NewHeader("From", "<"+s.cfg.PublicURI+">;tag="+s.fromTag))
+	}
 
 	if s.localPort <= 0 {
 		s.localPort = registerSIPLocalPort(s.cfg)

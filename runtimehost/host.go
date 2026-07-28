@@ -469,10 +469,18 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 	mnc := strings.TrimSpace(req.Prepared.EffectiveCarrier.MNC)
 	carrierProfile := carrier.ResolveIMSRegisterProfile(mcc, mnc)
 
+	logger.Info("Carrier profile resolution",
+		logger.String("mcc", mcc),
+		logger.String("mnc", mnc),
+		logger.String("carrier_user_agent", carrierProfile.Profile.UserAgent),
+		logger.String("carrier_contact_features", carrierProfile.Profile.ContactFeatures))
+
 	registerProfile := req.RegisterProfile.Normalized()
 	// Override with carrier-specific profile if available
 	if carrierProfile.Profile.ContactFeatures != "" {
 		registerProfile = carrierProfile.Profile
+		logger.Info("Applied carrier-specific register profile",
+			logger.String("user_agent", registerProfile.UserAgent))
 	}
 
 	if voiceclient.UsesIMSIHomeDomainIdentity(registerProfile) {
