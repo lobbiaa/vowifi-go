@@ -45,11 +45,12 @@ type registerSession struct {
 	phase         registerPhase
 	jitter        bool
 
-	conn      *connRegisterTransport
-	callID    string
-	fromTag   string // [FIX] Preserve From tag across initial and authenticated REGISTER
-	cseq      uint32
-	localPort int
+	conn          *connRegisterTransport
+	callID        string
+	fromTag       string // [FIX] Preserve From tag across initial and authenticated REGISTER
+	cseq          uint32
+	localPort     int
+	lastSentReq   *sip.Request // [FIX] Preserve actual sent request for authenticated REGISTER
 }
 
 func newRegisterSession(cfg Config, swu voiceclient.SWUTCPDialer, network IMSNetwork, transportMode string, attemptIndex int) *registerSession {
@@ -203,7 +204,8 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 					return nil, err
 				}
 				s.phase = registerPhaseSecure
-				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, nil, res)
+				// [CRITICAL FIX] Pass actual sent request, not nil
+				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, s.lastSentReq, res)
 			}
 			return finalizeRegisterSuccess(s.cfg, *s.state, res)
 		case sip.StatusUnauthorized, sip.StatusProxyAuthRequired:
@@ -220,16 +222,18 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 				}()))
 
 			if secServer != nil {
+				// [CRITICAL FIX] Use actual sent initial REGISTER, not a newly built one
+				// This preserves Call-ID and From tag for authenticated REGISTER
+				if s.lastSentReq == nil {
+					return nil, fmt.Errorf("missing initial REGISTER request for authenticated phase")
+				}
+
 				// Must compute AKA first to get CK/IK before installing IPsec
 				chal, err := selectDigestChallenge(s.cfg, res)
 				if err != nil {
 					return nil, fmt.Errorf("select challenge after 401: %w", err)
 				}
-				initReq, err := buildRegisterRequest(s.cfg, *s.state, false, initialRegisterVariant{})
-				if err != nil {
-					return nil, fmt.Errorf("build request for AKA: %w", err)
-				}
-				akaResult, authHeader, err := computeAKAAuth(s.cfg, chal, initReq)
+				akaResult, authHeader, err := computeAKAAuth(s.cfg, chal, s.lastSentReq)
 				if err != nil {
 					return nil, fmt.Errorf("compute AKA after 401: %w", err)
 				}
@@ -243,7 +247,7 @@ func (s *registerSession) runInitialRegisterFlow(ctx context.Context) (*register
 					return nil, fmt.Errorf("ipsec install after 401: %w", err)
 				}
 				s.phase = registerPhaseSecure
-				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, initReq, res)
+				return runSecureAuthenticatedRegister(ctx, s.cfg, s.swu, s.state, s.lastSentReq, res)
 			}
 			// No Security-Server - use plaintext auth (rare case)
 			logger.Warn("IMS REGISTER 401 without Security-Server, using plaintext auth",
@@ -325,19 +329,27 @@ func (s *registerSession) registerOnce(ctx context.Context, transport *connRegis
 		return nil, err
 	}
 
-	// [CRITICAL FIX] Preserve Call-ID and From tag from initial REGISTER
-	// The authenticated REGISTER must reuse these values to maintain the same dialog
-	if initial && s.callID == "" {
-		if callIDHdr := req.GetHeader("Call-ID"); callIDHdr != nil {
-			s.callID = callIDHdr.Value()
-		}
-		if fromHdr := req.GetHeader("From"); fromHdr != nil {
-			// Extract tag from From header (format: <uri>;tag=xyz)
-			fromValue := fromHdr.Value()
-			if tagIdx := strings.Index(fromValue, ";tag="); tagIdx != -1 {
-				s.fromTag = strings.TrimSpace(fromValue[tagIdx+5:])
-			}
-		}
+	// [CRITICAL FIX] Preserve the actual sent request for authenticated REGISTER
+	// Store it AFTER decorateRegisterRequest so we have the final version with Call-ID/From
+	if initial {
+		s.lastSentReq = req
+		logger.Info("Preserved initial REGISTER for authenticated phase",
+			logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)),
+			logger.String("call_id", func() string {
+				if h := req.GetHeader("Call-ID"); h != nil {
+					return h.Value()
+				}
+				return "<nil>"
+			}()),
+			logger.String("from_tag", func() string {
+				if h := req.GetHeader("From"); h != nil {
+					v := h.Value()
+					if idx := strings.Index(v, ";tag="); idx != -1 {
+						return v[idx+5:]
+					}
+				}
+				return "<nil>"
+			}()))
 	}
 
 	if err := transport.Send(ctx, req); err != nil {

@@ -378,6 +378,31 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 	}
 
 	req := prevReq.Clone()
+
+	logger.Info("buildAuthenticatedRegister: cloned request headers",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.String("call_id", func() string {
+			if h := req.GetHeader("Call-ID"); h != nil {
+				return h.Value()
+			}
+			return "<nil>"
+		}()),
+		logger.String("from_tag", func() string {
+			if h := req.GetHeader("From"); h != nil {
+				v := h.Value()
+				if idx := strings.Index(v, ";tag="); idx != -1 {
+					return v[idx+5:]
+				}
+			}
+			return "<nil>"
+		}()),
+		logger.String("user_agent", func() string {
+			if h := req.GetHeader("User-Agent"); h != nil {
+				return h.Value()
+			}
+			return "<nil>"
+		}()))
+
 	req.RemoveHeader("Via")
 	req.RemoveHeader("Authorization")
 	req.RemoveHeader("Security-Verify")
@@ -490,6 +515,12 @@ func buildRegisterRequest(cfg Config, state registerState, initial bool, variant
 	}
 	req.AppendHeader(sip.NewHeader("Security-Client", secClient))
 	req.AppendHeader(sip.NewHeader("User-Agent", cfg.UserAgent))
+
+	logger.Info("buildRegisterRequest: User-Agent header added",
+		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+		logger.String("user_agent", cfg.UserAgent),
+		logger.Bool("initial", initial))
+
 	req.SetDestination(effectiveTransportAddr(cfg))
 	req.SetTransport("TCP")
 	logRegisterRouting(cfg, req)
