@@ -498,20 +498,10 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 
 	// Apply carrier-specific SIP Instance URN and Register Expiry if provided
 	sipInstanceURN := strings.TrimSpace(req.SIPInstanceURN)
-	// If carrier preset specifies PhoneIMEI, use it to generate GSMA IMEI URN
-	// Get the carrier preset to check for PhoneIMEI
-	effectiveCarrier := carrier.ResolveEffectiveCarrier(carrier.EffectiveCarrierConfigInput{
-		MCC: mcc,
-		MNC: mnc,
-	})
-	if effectiveCarrier.PresetID != "" {
-		// Try to get PhoneIMEI from preset
-		// We need to access the preset, but lookup is private
-		// For now, check if it's O2 Germany specifically
-		if mcc == "262" && mnc == "03" {
-			// O2 Germany: use hardcoded IMEI for now
-			sipInstanceURN = voiceclient.IMEIToGSMAURN("350225649300646")
-		}
+	// O2 Germany: use IMEI-based SIP instance URN
+	if mcc == "262" && mnc == "03" {
+		// Format: urn:gsma:imei:35022564-930064-6
+		sipInstanceURN = "urn:gsma:imei:35022564-930064-6"
 	}
 	if sipInstanceURN == "" {
 		// Default: generate random UUID
