@@ -448,28 +448,33 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 
 	// [CRITICAL FIX] Update Route header to use port-s (6060) instead of 5060
 	// After IMS ESP is installed, authenticated REGISTER must be sent to the secure port
-	oldRoute := req.GetHeader("Route")
-	oldRouteValue := ""
-	if oldRoute != nil {
-		oldRouteValue = oldRoute.Value()
+	// O2 Germany: Skip Route header entirely if template says to remove
+	if !cfg.Template.RemoveRoute {
+		oldRoute := req.GetHeader("Route")
+		oldRouteValue := ""
+		if oldRoute != nil {
+			oldRouteValue = oldRoute.Value()
+		}
+		req.RemoveHeader("Route")
+		remoteIP := effectiveIPSecRemoteIP(cfg)
+		secureRouteAddr := net.JoinHostPort(remoteIP.String(), fmt.Sprintf("%d", state.selectedOffer.PortS))
+		req.AppendHeader(sip.NewHeader("Route", "<sip:"+secureRouteAddr+";lr>"))
+
+		logger.Info("buildAuthenticatedRegister Route header and destination updated",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+			logger.String("old_route", oldRouteValue),
+			logger.String("new_route", "<sip:"+secureRouteAddr+";lr>"),
+			logger.String("destination", secureRouteAddr),
+			logger.String("remote_ip", remoteIP.String()),
+			logger.Int("port_s", state.selectedOffer.PortS))
 	}
-	req.RemoveHeader("Route")
-	remoteIP := effectiveIPSecRemoteIP(cfg)
-	secureRouteAddr := net.JoinHostPort(remoteIP.String(), fmt.Sprintf("%d", state.selectedOffer.PortS))
-	req.AppendHeader(sip.NewHeader("Route", "<sip:"+secureRouteAddr+";lr>"))
 
 	// [CRITICAL FIX] Override SetDestination to use port-s (6060)
 	// This is what sipgo actually uses to route the TCP connection, not the Route header
+	remoteIP := effectiveIPSecRemoteIP(cfg)
+	secureRouteAddr := net.JoinHostPort(remoteIP.String(), fmt.Sprintf("%d", state.selectedOffer.PortS))
 	req.SetDestination(secureRouteAddr)
 	req.SetTransport("TCP")
-
-	logger.Info("buildAuthenticatedRegister Route header and destination updated",
-		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
-		logger.String("old_route", oldRouteValue),
-		logger.String("new_route", "<sip:"+secureRouteAddr+";lr>"),
-		logger.String("destination", secureRouteAddr),
-		logger.String("remote_ip", remoteIP.String()),
-		logger.Int("port_s", state.selectedOffer.PortS))
 
 	req.AppendHeader(sip.NewHeader("Authorization", authHeader))
 	if state.verifyHeader != "" {
@@ -498,7 +503,10 @@ func buildRegisterRequest(cfg Config, state registerState, initial bool, variant
 		req.AppendHeader(sip.NewHeader("Route", "<sip:"+effectiveRouteAddr(cfg)+";lr>"))
 	}
 	expires := cfg.RegisterExpirySeconds
-	if expires <= 0 {
+	// Use template Expires if specified (O2 Germany uses 600000)
+	if cfg.Template.Expires > 0 {
+		expires = cfg.Template.Expires
+	} else if expires <= 0 {
 		expires = 3600
 	}
 	req.AppendHeader(sip.NewHeader("Expires", strconv.Itoa(expires)))

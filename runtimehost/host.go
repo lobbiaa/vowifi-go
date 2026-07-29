@@ -498,8 +498,12 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 
 	// Apply carrier-specific SIP Instance URN and Register Expiry if provided
 	sipInstanceURN := strings.TrimSpace(req.SIPInstanceURN)
-	if carrierProfile.SIPInstanceURN != "" {
-		sipInstanceURN = carrierProfile.SIPInstanceURN
+	// If carrier preset specifies PhoneIMEI, use it to generate GSMA IMEI URN
+	if preset.PhoneIMEI != "" {
+		sipInstanceURN = voiceclient.IMEIToGSMAURN(preset.PhoneIMEI)
+	} else if sipInstanceURN == "" {
+		// Default: generate random UUID
+		sipInstanceURN = voiceclient.NewSIPInstanceURN()
 	}
 	registerExpiry := req.RegisterExpiry
 	if carrierProfile.RegisterExpiry > 0 {
