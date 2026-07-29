@@ -30,6 +30,14 @@ type IMSRegisterTemplate struct {
 	EnableInitialRejectFallback         bool
 	FallbackIncludesServerParamsInSecCl bool
 	RegisterPolicy                      IMSRegisterPolicy
+	// O2 Germany specific fields
+	RemovePPreferredID      bool
+	RemovePVisitedNetworkID bool
+	RemoveAcceptContact     bool
+	RemoveRoute             bool
+	MultipleICSIRefs        []string
+	PANINodeID              string
+	PANICountry             string
 }
 
 // IPSec3GPPSecurityMechanism is one ipsec-3gpp offer the client advertises in

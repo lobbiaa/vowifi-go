@@ -45,15 +45,15 @@ func DefaultO2GermanyTemplate() IMSRegisterTemplate {
 		SupportedHeader:             "path, sec-agree",
 		RequireHeader:               "sec-agree",
 		ProxyRequireHeader:          "sec-agree",
+		AllowHeader:                 "OPTIONS, REGISTER, SUBSCRIBE, NOTIFY, PUBLISH, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE",
+		Expires:                     600000,
 		IncludePANIAuthenticated:    true,
 		StrictSecurityServerOffer:   true,
 		EnableInitialRejectFallback: false,
 		ContactParamOrder: []string{
-			"access_type",
-			"audio",
-			"smsip",
-			"icsi_ref",
 			"sip_instance",
+			"icsi_ref_multi",
+			"access_type_wlan1",
 		},
 		SecurityClientMechanisms: mechanisms,
 		RegisterPolicy: IMSRegisterPolicy{
@@ -63,5 +63,19 @@ func DefaultO2GermanyTemplate() IMSRegisterTemplate {
 			InitialRejectFallbackStatusCodes: []int{400, 403, 500},
 			TemporaryRetrySeconds:            60,
 		},
+		// O2 Germany specific: Remove standard headers
+		RemovePPreferredID:      true,
+		RemovePVisitedNetworkID: true,
+		RemoveAcceptContact:     true,
+		RemoveRoute:             true,
+		// O2 Germany specific: Multiple ICSI refs
+		MultipleICSIRefs: []string{
+			"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel",
+			"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.msg",
+			"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.sms",
+		},
+		// O2 Germany specific: Custom PANI
+		PANINodeID:  "22e537707c11",
+		PANICountry: "DE",
 	}
 }

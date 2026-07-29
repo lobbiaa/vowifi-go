@@ -493,7 +493,10 @@ func buildRegisterRequest(cfg Config, state registerState, initial bool, variant
 			req.AppendHeader(sip.NewHeader("Authorization", auth))
 		}
 	}
-	req.AppendHeader(sip.NewHeader("Route", "<sip:"+effectiveRouteAddr(cfg)+";lr>"))
+	// Route header: skip if template says to remove (O2 Germany)
+	if !cfg.Template.RemoveRoute {
+		req.AppendHeader(sip.NewHeader("Route", "<sip:"+effectiveRouteAddr(cfg)+";lr>"))
+	}
 	expires := cfg.RegisterExpirySeconds
 	if expires <= 0 {
 		expires = 3600
@@ -517,9 +520,23 @@ func buildRegisterRequest(cfg Config, state registerState, initial bool, variant
 	}
 	req.AppendHeader(sip.NewHeader("Supported", supportedHeader))
 
-	req.AppendHeader(sip.NewHeader("Allow", "INVITE,ACK,CANCEL,BYE,UPDATE,PRACK,MESSAGE,REFER,NOTIFY,INFO,OPTIONS"))
-	req.AppendHeader(sip.NewHeader("P-Preferred-Identity", "<"+cfg.PublicURI+">"))
-	req.AppendHeader(sip.NewHeader("P-Visited-Network-ID", "\""+cfg.HomeDomain+"\""))
+	// Allow header: use template if specified, otherwise default
+	allowHeader := strings.TrimSpace(cfg.Template.AllowHeader)
+	if allowHeader == "" {
+		allowHeader = "INVITE,ACK,CANCEL,BYE,UPDATE,PRACK,MESSAGE,REFER,NOTIFY,INFO,OPTIONS"
+	}
+	req.AppendHeader(sip.NewHeader("Allow", allowHeader))
+
+	// P-Preferred-Identity: skip if template says to remove
+	if !cfg.Template.RemovePPreferredID {
+		req.AppendHeader(sip.NewHeader("P-Preferred-Identity", "<"+cfg.PublicURI+">"))
+	}
+
+	// P-Visited-Network-ID: skip if template says to remove
+	if !cfg.Template.RemovePVisitedNetworkID {
+		req.AppendHeader(sip.NewHeader("P-Visited-Network-ID", "\""+cfg.HomeDomain+"\""))
+	}
+
 	includePANI := cfg.Template.IncludePANIAuthenticated
 	includeCellular := true
 	if initial {
@@ -527,13 +544,25 @@ func buildRegisterRequest(cfg Config, state registerState, initial bool, variant
 		includeCellular = variant.includeCellular
 	}
 	if includePANI {
-		req.AppendHeader(sip.NewHeader("P-Access-Network-Info", "IEEE-802.11;i-wlan-node-id=000000000000;network-provided"))
+		// Use custom PANI if specified in template (O2 Germany)
+		paniValue := "IEEE-802.11;i-wlan-node-id=000000000000;network-provided"
+		if cfg.Template.PANINodeID != "" {
+			paniValue = fmt.Sprintf("IEEE-802.11; i-wlan-node-id=\"%s\"", cfg.Template.PANINodeID)
+			if cfg.Template.PANICountry != "" {
+				paniValue += fmt.Sprintf(";country=%s", cfg.Template.PANICountry)
+			}
+		}
+		req.AppendHeader(sip.NewHeader("P-Access-Network-Info", paniValue))
 	}
 	if includeCellular {
 		req.AppendHeader(sip.NewHeader("Cellular-Network-Info", buildCellularNetworkInfo(cfg)))
 	}
-	req.AppendHeader(sip.NewHeader("Accept-Contact", "*;+g.3gpp.smsip"))
-	req.AppendHeader(sip.NewHeader("Accept-Contact", "*;+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\""))
+
+	// Accept-Contact headers: skip if template says to remove (O2 Germany)
+	if !cfg.Template.RemoveAcceptContact {
+		req.AppendHeader(sip.NewHeader("Accept-Contact", "*;+g.3gpp.smsip"))
+		req.AppendHeader(sip.NewHeader("Accept-Contact", "*;+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel\""))
+	}
 	var secClient string
 	if initial {
 		secClient = buildTemplateSecurityClient(cfg.Template, state.spiC, state.spiS, state.portC, state.portS)

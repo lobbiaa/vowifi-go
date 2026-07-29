@@ -47,14 +47,25 @@ func BuildIMSContactHeader(tmpl IMSRegisterTemplate, input ContactBuildInput) st
 	b.WriteString(local)
 	b.WriteString(">")
 	for _, param := range order {
-		appendContactParam(&b, param, input)
+		paramLower := strings.ToLower(strings.TrimSpace(param))
+		if paramLower == "icsi_ref_multi" && len(tmpl.MultipleICSIRefs) > 0 {
+			// O2 Germany: Multiple ICSI refs in single parameter
+			b.WriteString(`;+g.3gpp.icsi-ref="`)
+			b.WriteString(strings.Join(tmpl.MultipleICSIRefs, ","))
+			b.WriteString(`"`)
+		} else {
+			appendContactParam(&b, param, input)
+		}
 	}
 	expires := input.RegisterExpirySecs
 	if expires <= 0 {
 		expires = 3600
 	}
-	b.WriteString(";expires=")
-	b.WriteString(strconv.Itoa(expires))
+	// O2 Germany: Don't include expires in Contact header (use Expires header instead)
+	if !tmpl.RemoveRoute {
+		b.WriteString(";expires=")
+		b.WriteString(strconv.Itoa(expires))
+	}
 	return b.String()
 }
 
@@ -62,6 +73,9 @@ func appendContactParam(b *strings.Builder, name string, input ContactBuildInput
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "access_type":
 		b.WriteString(`;+g.3gpp.accesstype="IEEE-802.11"`)
+	case "access_type_wlan1":
+		// O2 Germany uses wlan1 instead of IEEE-802.11
+		b.WriteString(`;+g.3gpp.accesstype="wlan1"`)
 	case "sip_instance":
 		if urn := strings.TrimSpace(input.SIPInstanceURN); urn != "" {
 			b.WriteString(`;+sip.instance="<`)
@@ -76,6 +90,10 @@ func appendContactParam(b *strings.Builder, name string, input ContactBuildInput
 		b.WriteString(`;+g.3gpp.icsi-ref="`)
 		b.WriteString(IMSMmtelICSIRef)
 		b.WriteString(`"`)
+	case "icsi_ref_multi":
+		// O2 Germany: Multiple ICSI refs separated by comma
+		// Will be populated from template.MultipleICSIRefs
+		// This is handled separately in BuildIMSContactHeader
 	case "mid_call":
 		b.WriteString(";+g.3gpp.mid-call")
 	case "srvcc_alerting":
