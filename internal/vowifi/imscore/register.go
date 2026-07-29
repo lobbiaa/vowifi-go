@@ -157,6 +157,35 @@ func runSecureAuthenticatedRegister(ctx context.Context, cfg Config, swuTCP voic
 		return nil, fmt.Errorf("authenticated REGISTER: %w", err)
 	}
 	if finalRes.StatusCode != sip.StatusOK {
+		// Log all headers from error response for debugging
+		logger.Warn("Authenticated REGISTER failed - full response headers",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+			logger.Int("status", finalRes.StatusCode),
+			logger.String("reason", finalRes.Reason),
+			logger.String("warning", func() string {
+				if h := finalRes.GetHeader("Warning"); h != nil {
+					return h.Value()
+				}
+				return "<nil>"
+			}()),
+			logger.String("call_id", func() string {
+				if h := finalRes.GetHeader("Call-ID"); h != nil {
+					return h.Value()
+				}
+				return "<nil>"
+			}()),
+			logger.String("from", func() string {
+				if h := finalRes.GetHeader("From"); h != nil {
+					return h.Value()
+				}
+				return "<nil>"
+			}()),
+			logger.String("to", func() string {
+				if h := finalRes.GetHeader("To"); h != nil {
+					return h.Value()
+				}
+				return "<nil>"
+			}()))
 		_ = secureConn.Close()
 		return nil, fmt.Errorf("authenticated REGISTER failed: %d %s", finalRes.StatusCode, finalRes.Reason)
 	}

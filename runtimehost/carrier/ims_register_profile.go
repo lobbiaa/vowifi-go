@@ -20,9 +20,14 @@ type IMSRegisterProfileOptions struct {
 func ResolveIMSRegisterProfile(mcc, mnc string) IMSRegisterProfileOptions {
 	preset, ok := lookup(mcc, mnc)
 	if !ok {
+		// Debug: log when preset not found
+		println("[DEBUG] ResolveIMSRegisterProfile: preset not found for MCC=" + mcc + " MNC=" + mnc)
 		return IMSRegisterProfileOptions{}
 	}
-	switch strings.ToLower(strings.TrimSpace(preset.IMSRegisterProfile)) {
+	profileType := strings.ToLower(strings.TrimSpace(preset.IMSRegisterProfile))
+	// Debug: log what we found
+	println("[DEBUG] ResolveIMSRegisterProfile: MCC=" + mcc + " MNC=" + mnc + " preset.ID=" + preset.ID + " IMSRegisterProfile=" + profileType)
+	switch profileType {
 	case "xiaomi_mi11", "phone_xiaomi", "xiaomi_mi11_register":
 		profile := voiceclient.XiaomiMi11RegisterProfile()
 		sipInstance := voiceclient.FormatGSMAIMEIURN(strings.TrimSpace(preset.PhoneIMEI))

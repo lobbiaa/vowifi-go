@@ -705,7 +705,7 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 	}
 	imsTemplate := policy.DefaultGiffgaffTemplate()
 	if strings.TrimSpace(voiceCfg.RegisterProfile.UserAgent) == "" {
-		voiceCfg.RegisterProfile.UserAgent = "SimAdmin VoWiFi"
+		voiceCfg.RegisterProfile.UserAgent = "iOS/18.2.1 iPhone (iPhone15,4)"
 	}
 	presetID := ""
 	if req.Prepared != nil {
