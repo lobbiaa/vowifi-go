@@ -704,9 +704,8 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		voiceCfg.RegisterExpiry = i.registerExpiry
 	}
 	imsTemplate := policy.DefaultGiffgaffTemplate()
-	if strings.TrimSpace(voiceCfg.RegisterProfile.UserAgent) == "" {
-		voiceCfg.RegisterProfile.UserAgent = "iOS/18.2.1 iPhone (iPhone15,4)"
-	}
+	// [TEMP FIX] Force iOS User-Agent for O2 Germany testing
+	voiceCfg.RegisterProfile.UserAgent = "iOS/18.2.1 iPhone (iPhone15,4)"
 	presetID := ""
 	if req.Prepared != nil {
 		presetID = strings.TrimSpace(req.Prepared.EffectiveCarrier.PresetID)
