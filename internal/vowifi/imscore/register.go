@@ -436,6 +436,16 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 	req.RemoveHeader("Authorization")
 	req.RemoveHeader("Security-Verify")
 
+	// [CRITICAL FIX] Add Via header with rport and alias parameters
+	// O2 Germany requires these parameters for proper NAT traversal (RFC 3581, RFC 3263)
+	secureViaPort := state.portC
+	if secureViaPort <= 0 {
+		secureViaPort = 5060 // fallback to default
+	}
+	viaHost := formatRegisterViaHost(cfg.LocalIP, secureViaPort)
+	via := fmt.Sprintf("SIP/2.0/TCP %s;rport;branch=%s;alias", viaHost, sip.GenerateBranchN(16))
+	req.PrependHeader(sip.NewHeader("Via", via))
+
 	// [CRITICAL FIX] Update Contact header to use UE's port-s (UE server port)
 	// After IMS ESP is installed, P-CSCF must be able to reach UE on UE's port-s
 	// The initial REGISTER used port 5060, but authenticated REGISTER must use state.portS

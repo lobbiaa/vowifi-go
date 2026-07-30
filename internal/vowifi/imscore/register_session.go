@@ -419,7 +419,9 @@ func (s *registerSession) decorateRegisterRequest(req *sip.Request) error {
 		s.localPort = registerSIPLocalPort(s.cfg)
 	}
 	viaHost := formatRegisterViaHost(s.cfg.LocalIP, s.localPort)
-	via := fmt.Sprintf("SIP/2.0/TCP %s;branch=%s", viaHost, sip.GenerateBranchN(16))
+	// Add rport (RFC 3581 - symmetric response routing) and alias (RFC 3263 - address is an alias)
+	// O2 Germany requires these parameters for proper NAT traversal
+	via := fmt.Sprintf("SIP/2.0/TCP %s;rport;branch=%s;alias", viaHost, sip.GenerateBranchN(16))
 	req.PrependHeader(sip.NewHeader("Via", via))
 	req.AppendHeader(sip.NewHeader("Call-ID", s.callID))
 	req.AppendHeader(sip.NewHeader("CSeq", fmt.Sprintf("%d REGISTER", s.cseq)))
