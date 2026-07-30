@@ -105,7 +105,9 @@ func ComputeDigest(provider sim.AKAProvider, chal *digest.Challenge, opts digest
 
 	switch {
 	case akaErr == nil:
-		opts.Password = hex.EncodeToString(akaResult.RES)
+		// [CRITICAL FIX] Use raw RES bytes, not hex string, for HA1 calculation
+		// RFC 3310: HA1 = MD5(username:realm:RES) where RES is binary
+		opts.Password = string(akaResult.RES)
 		cred, err := digest.Digest(&mathChal, opts)
 		if err != nil {
 			return Result{}, fmt.Errorf("simauth: compute digest: %w", err)
