@@ -60,6 +60,7 @@ type StartSessionInput struct {
 	MNC                   string
 	CellID                string
 	RegisterExpirySeconds int
+	ContactUser           string  // Optional: UUID for Contact user part (O2 Germany), empty = use IMSI
 }
 
 // IMSConfigFromVoice builds the author-facing IMSConfig from runtimehost inputs.
@@ -133,6 +134,7 @@ func internalConfigFromIMS(ims IMSConfig, in StartSessionInput) Config {
 		CellID:                strings.TrimSpace(in.CellID),
 		SIPInstanceURN:        strings.TrimSpace(ims.SIPInstance),
 		UserAgent:             strings.TrimSpace(ims.UserAgent),
+		ContactUser:           strings.TrimSpace(in.ContactUser),  // Pass ContactUser for UUID support
 		RegisterExpirySeconds: in.RegisterExpirySeconds,
 		DeliveryStore:         in.DeliveryStore,
 	}

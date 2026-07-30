@@ -17,15 +17,20 @@ type ContactBuildInput struct {
 	LocalPort          int
 	SIPInstanceURN     string
 	RegisterExpirySecs int
+	ContactUser        string  // Optional: if set, use this instead of IMSI for Contact user part (e.g., UUID for O2 Germany)
 }
 
 // BuildIMSContactHeader renders Contact per carrier contact_param_order.
 func BuildIMSContactHeader(tmpl IMSRegisterTemplate, input ContactBuildInput) string {
-	user := strings.TrimSpace(input.IMSI)
-	if idx := strings.Index(input.PublicURI, ":"); idx >= 0 {
-		rest := input.PublicURI[idx+1:]
-		if at := strings.Index(rest, "@"); at > 0 {
-			user = rest[:at]
+	// Use ContactUser if provided (e.g., UUID for O2 Germany), otherwise extract from IMSI/PublicURI
+	user := strings.TrimSpace(input.ContactUser)
+	if user == "" {
+		user = strings.TrimSpace(input.IMSI)
+		if idx := strings.Index(input.PublicURI, ":"); idx >= 0 {
+			rest := input.PublicURI[idx+1:]
+			if at := strings.Index(rest, "@"); at > 0 {
+				user = rest[:at]
+			}
 		}
 	}
 	port := input.LocalPort

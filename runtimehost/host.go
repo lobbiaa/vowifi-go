@@ -679,6 +679,15 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		logger.String("device_id", i.deviceID),
 		logger.Bool("installer_is_nil", installer == nil))
 
+	// Generate ContactUser UUID if registerProfile.ContactUserRandom is true (O2 Germany)
+	contactUser := ""
+	if i.registerProfile.ContactUserRandom {
+		contactUser = generateContactUserUUID()
+		logger.Info("Generated ContactUser UUID for O2 Germany",
+			logger.String("device_id", i.deviceID),
+			logger.String("contact_user", contactUser))
+	}
+
 	voiceCfg := voiceclient.Config{
 		DeviceID:            i.deviceID,
 		TraceID:             i.traceID,
@@ -738,6 +747,7 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		MNC:                   i.imsMNC,
 		CellID:                i.imsCellID,
 		RegisterExpirySeconds: int(i.registerExpiry / time.Second),
+		ContactUser:           contactUser,  // Pass UUID for O2 Germany Contact user part
 	})
 	if err != nil {
 		i.failStage(ctx, "ims", fmt.Sprintf("IMS dial failed: %v", err), formatStageFailureReason("ims_dial_failed", err))
@@ -1000,6 +1010,21 @@ func WithTraceID(ctx context.Context, traceID string) context.Context {
 		traceID = NewTraceID()
 	}
 	return context.WithValue(ctx, traceIDContextKey{}, traceID)
+}
+
+// generateContactUserUUID generates a random UUID for Contact user part (O2 Germany)
+func generateContactUserUUID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "00000000-0000-4000-8000-000000000000"
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // Set version to 4
+	b[8] = (b[8] & 0x3f) | 0x80 // Set variant to RFC 4122
+	return fmt.Sprintf(
+		"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+		b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+		b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15],
+	)
 }
 
 func SetLogger(l interface{}) {}

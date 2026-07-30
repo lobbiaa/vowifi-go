@@ -73,6 +73,7 @@ func SimAdminGBEERegisterProfile() RegisterProfile {
 // iOS 18.2.1 iPhone 15,4 VoWiFi UA, require sec-agree, and IMS home-domain identity.
 func SimAdminIOSRegisterProfile() RegisterProfile {
 	profile := DefaultGBEERegisterProfile()
+	profile.ContactFeatures = "simadmin_ios"  // Must be non-empty to trigger carrier profile override
 	profile.UserAgent = "iOS/18.2.1 iPhone (iPhone15,4)"
 	profile.IncludeRequireSecAgree = true
 	profile.InitialAuthorization = "aka_empty_uri_first"

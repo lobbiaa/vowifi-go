@@ -84,6 +84,8 @@ var builtinDefaults = map[string]Preset{
 	// EE UK host network (giffgaff roaming core); same O2/EE-style identifiers.
 	"234-33": {ID: "ee-uk", MCC: "234", MNC: "33", IMSTAC: 28673, IMSCellID: 12345678},
 	// O2 Germany: Use iOS 18.2.1 iPhone 15,4 profile for IMS REGISTER
+	// Store with both normalized (262-3) and non-normalized (262-03) keys for compatibility
+	"262-3":  {ID: "O2_de_26203", MCC: "262", MNC: "03", IMSRegisterProfile: "simadmin_ios", PhoneIMEI: "350225649300646"},
 	"262-03": {ID: "O2_de_26203", MCC: "262", MNC: "03", IMSRegisterProfile: "simadmin_ios", PhoneIMEI: "350225649300646"},
 }
 

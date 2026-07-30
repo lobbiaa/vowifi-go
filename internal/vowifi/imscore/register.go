@@ -716,6 +716,7 @@ func buildIMSCoreContact(cfg Config, state registerState, localPort int) string 
 		LocalPort:          localPort,
 		SIPInstanceURN:     sipInstance,
 		RegisterExpirySecs: cfg.RegisterExpirySeconds,
+		ContactUser:        cfg.ContactUser,  // Pass ContactUser for UUID support (O2 Germany)
 	})
 }
 

@@ -50,6 +50,7 @@ type Config struct {
 
 	SIPInstanceURN string
 	UserAgent      string
+	ContactUser    string  // Optional: UUID for Contact user part (O2 Germany), empty = use IMSI
 
 	RegisterExpirySeconds int
 
