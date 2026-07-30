@@ -436,13 +436,21 @@ func buildAuthenticatedRegister(cfg Config, state registerState, prevReq *sip.Re
 	req.RemoveHeader("Authorization")
 	req.RemoveHeader("Security-Verify")
 
+	// [CRITICAL FIX] Increment CSeq for authenticated REGISTER
+	// RFC 3261 requires CSeq to increment for each new request in a dialog
+	// The initial REGISTER and authenticated REGISTER are separate requests
+	req.RemoveHeader("CSeq")
+	oldCSeq := prevReq.CSeq()
+	if oldCSeq != nil {
+		newCSeqNum := oldCSeq.SeqNo + 1
+		req.AppendHeader(sip.NewHeader("CSeq", fmt.Sprintf("%d REGISTER", newCSeqNum)))
+	}
+
 	// [CRITICAL FIX] Add Via header with rport and alias parameters
 	// O2 Germany requires these parameters for proper NAT traversal (RFC 3581, RFC 3263)
-	secureViaPort := state.portC
-	if secureViaPort <= 0 {
-		secureViaPort = 5060 // fallback to default
-	}
-	viaHost := formatRegisterViaHost(cfg.LocalIP, secureViaPort)
+	// IMPORTANT: Via header must use port 5060 (not port-c) for authenticated REGISTER
+	// Verified via packet capture from working implementation
+	viaHost := formatRegisterViaHost(cfg.LocalIP, 5060)
 	via := fmt.Sprintf("SIP/2.0/TCP %s;rport;branch=%s;alias", viaHost, sip.GenerateBranchN(16))
 	req.PrependHeader(sip.NewHeader("Via", via))
 
