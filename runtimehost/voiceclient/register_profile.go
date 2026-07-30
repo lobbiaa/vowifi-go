@@ -77,6 +77,7 @@ func SimAdminIOSRegisterProfile() RegisterProfile {
 	profile.IncludeRequireSecAgree = true
 	profile.InitialAuthorization = "aka_empty_uri_first"
 	profile.AuthorizationIdentity = "imsi_home_domain"
+	profile.ContactUserRandom = true  // O2 Germany uses random UUID in Contact user part
 	return profile
 }
 

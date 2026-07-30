@@ -51,9 +51,11 @@ func DefaultO2GermanyTemplate() IMSRegisterTemplate {
 		StrictSecurityServerOffer:   true,
 		EnableInitialRejectFallback: false,
 		ContactParamOrder: []string{
-			"sip_instance",
-			"icsi_ref_multi",
 			"access_type_wlan1",
+			"sip_instance",
+			"audio",
+			"smsip",
+			"icsi_ref_multi",
 		},
 		SecurityClientMechanisms: mechanisms,
 		RegisterPolicy: IMSRegisterPolicy{
