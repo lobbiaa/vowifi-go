@@ -15,14 +15,34 @@ import (
 )
 
 func newSWUNetstack(localIP net.IP, dp voiceclient.PacketDataplane) (voiceclient.SWUTCPDialer, error) {
-	// In TUN mode, return nil to force IMS to use OS TCP stack through the TUN interface
-	// This allows proper routing and IPsec-3GPP protection at the network layer
+	// In TUN mode, we need to provide a dialer for port-s listener in transport runtime
+	// Return a simple wrapper around net.Dialer that works through the TUN interface
 	if dp == nil {
-		return nil, nil
+		return &tunTCPDialer{localIP: localIP}, nil
 	}
 	// Check if we're in netstack mode by testing if dp has SendInnerPacket method
-	// In TUN mode, we intentionally return nil so IMS uses net.Dialer
-	return nil, nil
+	// In TUN mode, use the simple dialer wrapper
+	return &tunTCPDialer{localIP: localIP}, nil
+}
+
+// tunTCPDialer wraps net.Dialer for TUN mode
+type tunTCPDialer struct {
+	localIP net.IP
+}
+
+func (d *tunTCPDialer) DialContextTCP(ctx context.Context, localIP net.IP, localPort int, remoteIP net.IP, remotePort int) (net.Conn, error) {
+	dialer := &net.Dialer{
+		LocalAddr: &net.TCPAddr{
+			IP:   localIP,
+			Port: localPort,
+		},
+	}
+	return dialer.DialContext(ctx, "tcp", net.JoinHostPort(remoteIP.String(), strconv.Itoa(remotePort)))
+}
+
+func (d *tunTCPDialer) ListenContextTCP(ctx context.Context, localIP net.IP, localPort int) (net.Listener, error) {
+	lc := &net.ListenConfig{}
+	return lc.Listen(ctx, "tcp", net.JoinHostPort(localIP.String(), strconv.Itoa(localPort)))
 }
 
 func dialPlainTCP(ctx context.Context, cfg Config, swu voiceclient.SWUTCPDialer) (net.Conn, error) {
