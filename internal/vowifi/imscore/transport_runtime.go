@@ -272,14 +272,14 @@ func (rt *transportRuntime) handleNotify(ctx context.Context, conn *ipsec3gpp.Se
 
 func (rt *transportRuntime) sendSimpleResponse(conn *ipsec3gpp.SecureChannelConn, req *sip.Request, statusCode int) {
 	// Create response
-	res := sip.NewResponseFromRequest(req, sip.StatusCode(statusCode), "", nil)
+	res := sip.NewResponseFromRequest(req, statusCode, "", nil)
 
 	// Send response
 	resBytes := []byte(res.String())
 	if _, err := conn.Write(resBytes); err != nil {
 		logger.Warn("IMS port-s response write failed",
 			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
-			logger.Int("status", int(statusCode)),
+			logger.Int("status", statusCode),
 			logger.String("error", err.Error()))
 		return
 	}
@@ -291,8 +291,8 @@ func (rt *transportRuntime) sendSimpleResponse(conn *ipsec3gpp.SecureChannelConn
 
 	logger.Info("IMS port-s response sent",
 		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
-		logger.Int("status", int(statusCode)),
-		logger.String("method", req.Method().String()))
+		logger.Int("status", statusCode),
+		logger.String("method", string(req.Method)))
 }
 
 
