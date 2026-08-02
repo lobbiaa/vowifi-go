@@ -45,6 +45,11 @@ func (d *tunTCPDialer) ListenContextTCP(ctx context.Context, localIP net.IP, loc
 	return lc.Listen(ctx, "tcp", net.JoinHostPort(localIP.String(), strconv.Itoa(localPort)))
 }
 
+func (d *tunTCPDialer) Close() error {
+	// No resources to clean up in TUN mode
+	return nil
+}
+
 func dialPlainTCP(ctx context.Context, cfg Config, swu voiceclient.SWUTCPDialer) (net.Conn, error) {
 	host, portStr, err := net.SplitHostPort(cfg.PCSCFAddr)
 	if err != nil {
