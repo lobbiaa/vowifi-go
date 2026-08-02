@@ -200,6 +200,11 @@ type Client struct {
 	basePublicURI   string
 	securityClient  securityClientState
 
+	// IMS registration state from 200 OK response
+	pAssociatedURI    string // P-Associated-URI from REGISTER 200 OK (e.g., sip:+491791564538@telefonica.de)
+	serviceRoute      string // Service-Route from REGISTER 200 OK
+	securityVerify    string // Security-Verify value (from Security-Server in REGISTER 401)
+
 	mu       sync.Mutex
 	closed   bool
 	stopCh   chan struct{}

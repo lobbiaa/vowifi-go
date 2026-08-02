@@ -191,6 +191,21 @@ func (c *Client) registerOnceAttempt(ctx context.Context) error {
 	if res.StatusCode != 200 {
 		return fmt.Errorf("unexpected final REGISTER response: %d %s", res.StatusCode, res.Reason)
 	}
+
+	// Parse and save P-Associated-URI and Service-Route for SUBSCRIBE
+	if pAssocHdr := res.GetHeader("P-Associated-URI"); pAssocHdr != nil {
+		c.pAssociatedURI = pAssocHdr.Value()
+		logger.Info("IMS REGISTER saved P-Associated-URI",
+			logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+			logger.String("p_associated_uri", c.pAssociatedURI))
+	}
+	if serviceRouteHdr := res.GetHeader("Service-Route"); serviceRouteHdr != nil {
+		c.serviceRoute = serviceRouteHdr.Value()
+		logger.Info("IMS REGISTER saved Service-Route",
+			logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+			logger.String("service_route", c.serviceRoute))
+	}
+
 	logger.Info("IMS REGISTER completed",
 		logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
 		logger.Int("status", res.StatusCode))
@@ -277,6 +292,8 @@ func (c *Client) answerChallenge(ctx context.Context, prevReq *sip.Request, prev
 	if securityServer := prevRes.GetHeader("Security-Server"); securityServer != nil {
 		newReq.RemoveHeader("Security-Verify")
 		newReq.AppendHeader(sip.NewHeader("Security-Verify", securityServer.Value()))
+		// Save Security-Verify for later use in SUBSCRIBE
+		c.securityVerify = securityServer.Value()
 	}
 
 	res, err := c.doRegisterTransaction(ctx, newReq, sipgo.ClientRequestIncreaseCSEQ, sipgo.ClientRequestAddVia)
