@@ -46,7 +46,10 @@ func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.S
 		return nil, fmt.Errorf("imscore: transport runtime missing port-s")
 	}
 
-	ctx, cancel := context.WithCancel(parent)
+	// Use background context instead of parent to avoid cancellation
+	// when parent (request) context expires. Transport runtime should
+	// live until explicitly stopped via Close().
+	ctx, cancel := context.WithCancel(context.Background())
 	rt := &transportRuntime{
 		cfg:       cfg,
 		policy:    policy,
