@@ -46,10 +46,11 @@ func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.S
 		return nil, fmt.Errorf("imscore: transport runtime missing port-s")
 	}
 
-	// Use background context instead of parent to avoid cancellation
-	// when parent (request) context expires. Transport runtime should
-	// live until explicitly stopped via Close().
-	ctx, cancel := context.WithCancel(context.Background())
+	// Create independent context for runtime goroutines
+	// This prevents premature cancellation when parent (request) context expires,
+	// while still allowing explicit shutdown via Close().
+	// The parent context is only used for startup validation above.
+	runtimeCtx, cancel := context.WithCancel(context.Background())
 	rt := &transportRuntime{
 		cfg:       cfg,
 		policy:    policy,
@@ -64,10 +65,10 @@ func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.S
 	})
 
 	rt.wg.Add(1)
-	go rt.runTCPWriteChannel(ctx)
+	go rt.runTCPWriteChannel(runtimeCtx)
 
 	rt.wg.Add(1)
-	go rt.runPortSListener(ctx, swu)
+	go rt.runPortSListener(runtimeCtx, swu)
 
 	logger.Info("IMS transport runtime started",
 		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
