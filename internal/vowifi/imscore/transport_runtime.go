@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/emiago/sipgo/sip"
 	"github.com/1239t/swu-go/pkg/logger"
 
 	"github.com/1239t/vowifi-go/internal/vowifi/ipsec3gpp"
@@ -163,28 +164,112 @@ func (rt *transportRuntime) runPortSListener(ctx context.Context, swu voiceclien
 func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3gpp.SecureChannelConn) {
 	defer rt.wg.Done()
 	defer conn.Close()
-	buf := make([]byte, 64*1024)
+
+	// Create SIP parser for this connection
+	parser := sip.NewParser(conn, sip.MTU, logger.Global())
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
-		n, err := conn.Read(buf)
+
+		msg, err := parser.ParseSIP()
 		if err != nil {
 			if err != io.EOF {
-				logger.Warn("IMS port-s read ended",
+				logger.Warn("IMS port-s SIP parse error",
 					logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 					logger.String("error", err.Error()))
 			}
 			return
 		}
-		if n == 0 {
+
+		if msg == nil {
 			continue
 		}
+
+		// Log incoming message
 		installSIPTrace(rt.cfg.TraceID, rt.cfg.DeviceID)
 		sipTraceLogger{traceID: rt.cfg.TraceID, deviceID: rt.cfg.DeviceID}.
-			SIPTraceRead("tcp", conn.LocalAddr().String(), conn.RemoteAddr().String(), buf[:n])
+			SIPTraceRead("tcp", conn.LocalAddr().String(), conn.RemoteAddr().String(), []byte(msg.String()))
+
+		// Handle the message based on type
+		switch v := msg.(type) {
+		case *sip.Request:
+			rt.handleInboundRequest(ctx, conn, v)
+		case *sip.Response:
+			logger.Info("IMS port-s received response (unexpected)",
+				logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+				logger.Int("status", v.StatusCode),
+				logger.String("method", v.Method().String()))
+		}
 	}
 }
+
+func (rt *transportRuntime) handleInboundRequest(ctx context.Context, conn *ipsec3gpp.SecureChannelConn, req *sip.Request) {
+	method := req.Method()
+	logger.Info("IMS port-s received request",
+		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+		logger.String("method", method.String()),
+		logger.String("request_uri", req.Recipient.String()))
+
+	switch method {
+	case sip.NOTIFY:
+		rt.handleNotify(ctx, conn, req)
+	case sip.INVITE:
+		logger.Info("IMS port-s received INVITE (not implemented yet)",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)))
+		rt.sendSimpleResponse(conn, req, sip.StatusNotImplemented)
+	default:
+		logger.Warn("IMS port-s received unsupported method",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("method", method.String()))
+		rt.sendSimpleResponse(conn, req, sip.StatusMethodNotAllowed)
+	}
+}
+
+func (rt *transportRuntime) handleNotify(ctx context.Context, conn *ipsec3gpp.SecureChannelConn, req *sip.Request) {
+	// Log NOTIFY event type
+	eventHeader := req.GetHeader("Event")
+	var eventType string
+	if eventHeader != nil {
+		eventType = eventHeader.Value()
+	}
+
+	logger.Info("IMS NOTIFY received",
+		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+		logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+		logger.String("event", eventType),
+		logger.Int("content_length", len(req.Body())))
+
+	// Send 200 OK response
+	rt.sendSimpleResponse(conn, req, sip.StatusOK)
+}
+
+func (rt *transportRuntime) sendSimpleResponse(conn *ipsec3gpp.SecureChannelConn, req *sip.Request, statusCode sip.StatusCode) {
+	// Create response
+	res := sip.NewResponseFromRequest(req, statusCode, "", nil)
+
+	// Send response
+	resBytes := []byte(res.String())
+	if _, err := conn.Write(resBytes); err != nil {
+		logger.Warn("IMS port-s response write failed",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.Int("status", int(statusCode)),
+			logger.String("error", err.Error()))
+		return
+	}
+
+	// Log outgoing response
+	installSIPTrace(rt.cfg.TraceID, rt.cfg.DeviceID)
+	sipTraceLogger{traceID: rt.cfg.TraceID, deviceID: rt.cfg.DeviceID}.
+		SIPTraceWrite("tcp", conn.LocalAddr().String(), conn.RemoteAddr().String(), resBytes)
+
+	logger.Info("IMS port-s response sent",
+		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+		logger.Int("status", int(statusCode)),
+		logger.String("method", req.Method().String()))
+}
+
 
