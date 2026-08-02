@@ -127,10 +127,10 @@ func runSecureAuthenticatedRegister(ctx context.Context, cfg Config, swuTCP voic
 		_ = secureConn.Close()
 		return nil, err
 	}
-	defer ua.Close()
-	// Note: Do NOT defer secureClient.Close() here because we return secureConn
+	// Note: Do NOT defer ua.Close() or secureClient.Close() here because we return secureConn
 	// in registerResult for use by transport runtime. The connection lifecycle
 	// will be managed by transport runtime after successful REGISTER.
+	// On error paths, we must close both ua and the connection manually.
 
 	logger.Info("runSecureAuthenticatedRegister: SIP stack created",
 		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
@@ -139,6 +139,7 @@ func runSecureAuthenticatedRegister(ctx context.Context, cfg Config, swuTCP voic
 
 	authRes, _, err := buildAuthenticatedRegister(cfg, *state, lastReq, lastRes)
 	if err != nil {
+		_ = ua.Close()
 		_ = secureClient.Close()
 		_ = secureConn.Close()
 		return nil, err
@@ -158,6 +159,7 @@ func runSecureAuthenticatedRegister(ctx context.Context, cfg Config, swuTCP voic
 
 	finalRes, err := doRegisterTransaction(ctx, secureClient, authRes)
 	if err != nil {
+		_ = ua.Close()
 		_ = secureClient.Close()
 		_ = secureConn.Close()
 		return nil, fmt.Errorf("authenticated REGISTER: %w", err)
@@ -192,6 +194,7 @@ func runSecureAuthenticatedRegister(ctx context.Context, cfg Config, swuTCP voic
 				}
 				return "<nil>"
 			}()))
+		_ = ua.Close()
 		_ = secureClient.Close()
 		_ = secureConn.Close()
 		return nil, fmt.Errorf("authenticated REGISTER failed: %d %s", finalRes.StatusCode, finalRes.Reason)
