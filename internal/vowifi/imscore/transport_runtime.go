@@ -190,7 +190,18 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 		default:
 		}
 
+		logger.Debug("IMS port-s about to read",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("local", conn.LocalAddr().String()),
+			logger.String("remote", conn.RemoteAddr().String()))
+
 		n, err := reader.Read(buf)
+
+		logger.Info("IMS port-s read returned",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.Int("bytes", n),
+			logger.Bool("has_error", err != nil))
+
 		if err != nil {
 			if err != io.EOF {
 				logger.Warn("IMS port-s read error",
