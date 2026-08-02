@@ -180,6 +180,17 @@ func (s *Service) attachMessaging(ctx context.Context, winningPCSCF string) erro
 		return fmt.Errorf("voiceclient attach: %w", err)
 	}
 	s.inner = inner
+
+	// Send SUBSCRIBE for registration state events after successful REGISTER
+	// per 3GPP TS 24.229 and RFC 3680
+	if err := inner.Subscribe(ctx); err != nil {
+		logger.Warn("IMS SUBSCRIBE failed, continuing without subscription",
+			logger.String("trace_id", s.cfg.TraceID),
+			logger.String("device_id", s.cfg.DeviceID),
+			logger.String("error", err.Error()))
+		// Don't fail the entire attach if SUBSCRIBE fails - the core registration is working
+	}
+
 	return nil
 }
 
