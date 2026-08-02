@@ -174,8 +174,9 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 	// Use buffered reader to handle TCP segmentation
 	// Large NOTIFY messages with XML content arrive in multiple TCP segments
 	reader := bufio.NewReader(conn)
-	parser := sip.NewParser(reader, sip.MTU, logger.Global())
+	parser := sip.NewParser().NewSIPStream()
 
+	buf := make([]byte, 8192)
 	for {
 		select {
 		case <-ctx.Done():
@@ -185,10 +186,10 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 		default:
 		}
 
-		msg, err := parser.ParseSIP()
+		n, err := reader.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				logger.Warn("IMS port-s SIP parse error",
+				logger.Warn("IMS port-s read error",
 					logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 					logger.String("error", err.Error()))
 			} else {
@@ -198,33 +199,42 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 			return
 		}
 
-		if msg == nil {
+		if n == 0 {
 			continue
 		}
 
-		// Log incoming message
-		installSIPTrace(rt.cfg.TraceID, rt.cfg.DeviceID)
-		sipTraceLogger{traceID: rt.cfg.TraceID, deviceID: rt.cfg.DeviceID}.
-			SIPTraceRead("tcp", conn.LocalAddr().String(), conn.RemoteAddr().String(), []byte(msg.String()))
+		// Parse SIP stream with callback
+		parseErr := parser.ParseSIPStream(buf[:n], func(msg sip.Message) {
+			// Log incoming message
+			installSIPTrace(rt.cfg.TraceID, rt.cfg.DeviceID)
+			sipTraceLogger{traceID: rt.cfg.TraceID, deviceID: rt.cfg.DeviceID}.
+				SIPTraceRead("tcp", conn.LocalAddr().String(), conn.RemoteAddr().String(), []byte(msg.String()))
 
-		// Handle the message based on type
-		switch v := msg.(type) {
-		case *sip.Request:
-			rt.handleInboundRequest(ctx, conn, v)
-		case *sip.Response:
-			logger.Info("IMS port-s received response (unexpected)",
+			// Handle the message based on type
+			switch v := msg.(type) {
+			case *sip.Request:
+				rt.handleInboundRequest(ctx, conn, v)
+			case *sip.Response:
+				logger.Info("IMS port-s received response (unexpected)",
+					logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+					logger.Int("status", int(v.StatusCode)))
+			}
+		})
+
+		if parseErr != nil {
+			logger.Warn("IMS port-s SIP parse error",
 				logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
-				logger.Int("status", v.StatusCode),
-				logger.String("method", v.Method().String()))
+				logger.String("error", parseErr.Error()))
+			return
 		}
 	}
 }
 
 func (rt *transportRuntime) handleInboundRequest(ctx context.Context, conn *ipsec3gpp.SecureChannelConn, req *sip.Request) {
-	method := req.Method()
+	method := req.Method
 	logger.Info("IMS port-s received request",
 		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
-		logger.String("method", method.String()),
+		logger.String("method", string(method)),
 		logger.String("request_uri", req.Recipient.String()))
 
 	switch method {
@@ -233,12 +243,12 @@ func (rt *transportRuntime) handleInboundRequest(ctx context.Context, conn *ipse
 	case sip.INVITE:
 		logger.Info("IMS port-s received INVITE (not implemented yet)",
 			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)))
-		rt.sendSimpleResponse(conn, req, sip.StatusNotImplemented)
+		rt.sendSimpleResponse(conn, req, 501)
 	default:
 		logger.Warn("IMS port-s received unsupported method",
 			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
-			logger.String("method", method.String()))
-		rt.sendSimpleResponse(conn, req, sip.StatusMethodNotAllowed)
+			logger.String("method", string(method)))
+		rt.sendSimpleResponse(conn, req, 405)
 	}
 }
 
@@ -257,12 +267,12 @@ func (rt *transportRuntime) handleNotify(ctx context.Context, conn *ipsec3gpp.Se
 		logger.Int("content_length", len(req.Body())))
 
 	// Send 200 OK response
-	rt.sendSimpleResponse(conn, req, sip.StatusOK)
+	rt.sendSimpleResponse(conn, req, 200)
 }
 
-func (rt *transportRuntime) sendSimpleResponse(conn *ipsec3gpp.SecureChannelConn, req *sip.Request, statusCode sip.StatusCode) {
+func (rt *transportRuntime) sendSimpleResponse(conn *ipsec3gpp.SecureChannelConn, req *sip.Request, statusCode int) {
 	// Create response
-	res := sip.NewResponseFromRequest(req, statusCode, "", nil)
+	res := sip.NewResponseFromRequest(req, sip.StatusCode(statusCode), "", nil)
 
 	// Send response
 	resBytes := []byte(res.String())
