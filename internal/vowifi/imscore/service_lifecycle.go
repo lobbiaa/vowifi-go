@@ -83,6 +83,8 @@ func (s *Service) Start(ctx context.Context) error {
 	s.ipsecInstalled = reg.secureConn != nil
 	s.pcscf = winningPCSCF
 	s.localAddr = s.cfg.LocalIP.String()
+	s.pAssociatedURI = reg.pAssociatedURI
+	s.serviceRoute = reg.serviceRoute
 
 	if reg.secureConn != nil && reg.transport != nil {
 		rt, err := startTransportRuntime(lifecycleCtx, s.cfg, swu, reg.ipsecPolicy, reg.transport, reg.secureConn)
@@ -171,6 +173,9 @@ func (s *Service) attachMessaging(ctx context.Context, winningPCSCF string) erro
 		SIPInstanceURN:  s.cfg.SIPInstanceURN,
 		RegisterProfile: voiceclient.SimAdminGBEERegisterProfile(),
 		SkipRegister:    true,
+		PAssociatedURI:  s.pAssociatedURI,
+		ServiceRoute:    s.serviceRoute,
+		SecurityVerify:  s.verifyHeader,
 	}
 	if s.cfg.RegisterExpirySeconds > 0 {
 		voiceCfg.RegisterExpiry = time.Duration(s.cfg.RegisterExpirySeconds) * time.Second

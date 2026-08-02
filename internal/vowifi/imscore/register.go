@@ -60,12 +60,14 @@ type registerState struct {
 }
 
 type registerResult struct {
-	pcscfAddr      string
-	expiresSeconds int
-	verifyHeader   string
-	secureConn     *ipsec3gpp.SecureChannelConn
-	ipsecPolicy    ipsec3gpp.Policy
-	transport      *ipsec3gpp.Transport
+	pcscfAddr        string
+	expiresSeconds   int
+	verifyHeader     string
+	secureConn       *ipsec3gpp.SecureChannelConn
+	ipsecPolicy      ipsec3gpp.Policy
+	transport        *ipsec3gpp.Transport
+	pAssociatedURI   string // P-Associated-URI from REGISTER 200 OK
+	serviceRoute     string // Service-Route from REGISTER 200 OK
 }
 
 type initialRegisterVariant struct {
@@ -618,6 +620,22 @@ func finalizeRegisterSuccess(cfg Config, state registerState, res *sip.Response)
 			expires = v
 		}
 	}
+
+	// Parse P-Associated-URI and Service-Route for SUBSCRIBE
+	var pAssociatedURI, serviceRoute string
+	if h := res.GetHeader("P-Associated-URI"); h != nil {
+		pAssociatedURI = strings.TrimSpace(h.Value())
+		logger.Info("IMS REGISTER received P-Associated-URI",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+			logger.String("p_associated_uri", pAssociatedURI))
+	}
+	if h := res.GetHeader("Service-Route"); h != nil {
+		serviceRoute = strings.TrimSpace(h.Value())
+		logger.Info("IMS REGISTER received Service-Route",
+			logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
+			logger.String("service_route", serviceRoute))
+	}
+
 	logger.Info(fmt.Sprintf("[%s] IMS REGISTER 成功", strings.TrimSpace(cfg.DeviceID)),
 		logger.String("trace_id", strings.TrimSpace(cfg.TraceID)),
 		logger.Int("code", res.StatusCode),
@@ -631,6 +649,8 @@ func finalizeRegisterSuccess(cfg Config, state registerState, res *sip.Response)
 		secureConn:     state.secureConn,
 		ipsecPolicy:    state.ipsecPolicy,
 		transport:      state.transport,
+		pAssociatedURI: pAssociatedURI,
+		serviceRoute:   serviceRoute,
 	}, nil
 }
 

@@ -25,6 +25,8 @@ type Service struct {
 	pcscf            string
 	localAddr        string
 	started          bool
+	pAssociatedURI   string // P-Associated-URI from REGISTER 200 OK
+	serviceRoute     string // Service-Route from REGISTER 200 OK
 
 	network         IMSNetwork
 	transportRuntime *transportRuntime

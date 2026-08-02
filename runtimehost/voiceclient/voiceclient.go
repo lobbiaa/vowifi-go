@@ -135,6 +135,17 @@ type Config struct {
 	// SkipRegister skips the REGISTER handshake when IMS registration was already
 	// completed by imscore (ipsec-3gpp path).
 	SkipRegister bool
+
+	// P-Associated-URI from REGISTER 200 OK (e.g., sip:+491791564538@telefonica.de)
+	// Used as Request-URI and From/To in SUBSCRIBE
+	PAssociatedURI string
+
+	// Service-Route from REGISTER 200 OK
+	// Used as Route header in SUBSCRIBE
+	ServiceRoute string
+
+	// Security-Verify value from REGISTER authenticated response
+	SecurityVerify string
 }
 
 func (c Config) contactURI() string {
@@ -347,6 +358,9 @@ func Dial(ctx context.Context, cfg Config) (*Client, error) {
 		basePrivateID:   cfg.PrivateID,
 		basePublicURI:   cfg.PublicURI,
 		securityClient:  newSecurityClientState(),
+		pAssociatedURI:  cfg.PAssociatedURI,
+		serviceRoute:    cfg.ServiceRoute,
+		securityVerify:  cfg.SecurityVerify,
 		stopCh:          make(chan struct{}),
 		stopDone:        make(chan struct{}),
 	}
