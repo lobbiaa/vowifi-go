@@ -1,6 +1,7 @@
 package imscore
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -165,12 +166,21 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 	defer rt.wg.Done()
 	defer conn.Close()
 
-	// Create SIP parser for this connection
-	parser := sip.NewParser(conn, sip.MTU, logger.Global())
+	logger.Info("IMS port-s starting drain goroutine",
+		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+		logger.String("local", conn.LocalAddr().String()),
+		logger.String("remote", conn.RemoteAddr().String()))
+
+	// Use buffered reader to handle TCP segmentation
+	// Large NOTIFY messages with XML content arrive in multiple TCP segments
+	reader := bufio.NewReader(conn)
+	parser := sip.NewParser(reader, sip.MTU, logger.Global())
 
 	for {
 		select {
 		case <-ctx.Done():
+			logger.Info("IMS port-s drain context cancelled",
+				logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)))
 			return
 		default:
 		}
@@ -181,6 +191,9 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 				logger.Warn("IMS port-s SIP parse error",
 					logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 					logger.String("error", err.Error()))
+			} else {
+				logger.Info("IMS port-s connection closed (EOF)",
+					logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)))
 			}
 			return
 		}
