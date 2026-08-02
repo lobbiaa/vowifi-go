@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
 	"github.com/1239t/swu-go/pkg/logger"
 )
@@ -57,24 +56,10 @@ func (s *Service) sendSubscribe(ctx context.Context) error {
 		return fmt.Errorf("imscore: parse target URI: %w", err)
 	}
 
-	// Create SUBSCRIBE request
+	// Create SUBSCRIBE request - sip.NewRequest will add Via automatically
 	req := sip.NewRequest(sip.SUBSCRIBE, recipient)
 	req.SetTransport("TCP")
 	req.SetDestination(s.cfg.PCSCFAddr)
-
-	// Via header
-	viaAddr := fmt.Sprintf("[%s]:%d", s.cfg.LocalIP.String(), s.transportRuntime.policy.LocalPortS)
-	via := &sip.ViaHeader{
-		ProtocolName:    "SIP",
-		ProtocolVersion: "2.0",
-		Transport:       "TCP",
-		Host:            viaAddr,
-		Params: sip.NewParams().
-			Add("rport", nil).
-			Add("branch", sip.String{Str: sip.GenerateBranchN(16)}).
-			Add("alias", nil),
-	}
-	req.AppendHeader(via)
 
 	// From/To headers use target URI
 	fromTag := sip.GenerateTagN(16)
