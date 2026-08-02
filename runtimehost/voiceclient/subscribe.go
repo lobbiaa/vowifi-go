@@ -21,7 +21,9 @@ func (c *Client) Subscribe(ctx context.Context) error {
 		logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
 		logger.String("device_id", strings.TrimSpace(c.cfg.DeviceID)),
 		logger.String("public_uri", c.cfg.PublicURI),
-		logger.String("p_associated_uri", c.pAssociatedURI))
+		logger.String("p_associated_uri", c.pAssociatedURI),
+		logger.String("service_route", c.serviceRoute),
+		logger.String("security_verify", c.securityVerify))
 
 	// Use P-Associated-URI as the Request-URI if available, otherwise fall back to PublicURI
 	targetURI := c.cfg.PublicURI
@@ -39,14 +41,27 @@ func (c *Client) Subscribe(ctx context.Context) error {
 		}
 	}
 
+	logger.Info("IMS SUBSCRIBE using target URI",
+		logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+		logger.String("target_uri", targetURI))
+
 	// Parse target URI for Request-URI
 	recipient := sip.Uri{}
 	if err := sip.ParseUri(targetURI, &recipient); err != nil {
+		logger.Error("IMS SUBSCRIBE failed to parse target URI",
+			logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+			logger.String("target_uri", targetURI),
+			logger.String("error", err.Error()))
 		return fmt.Errorf("voiceclient: parse target URI: %w", err)
 	}
 
 	// Create SUBSCRIBE request with the target URI as Request-URI
 	req := sip.NewRequest(sip.SUBSCRIBE, recipient)
+
+	logger.Info("IMS SUBSCRIBE request created",
+		logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+		logger.String("method", string(req.Method)),
+		logger.String("request_uri", req.Recipient.String()))
 
 	// Set transport
 	if c.cfg.transportNetwork() == "tcp" {
@@ -125,12 +140,25 @@ func (c *Client) Subscribe(ctx context.Context) error {
 	// Content-Length
 	req.AppendHeader(sip.NewHeader("Content-Length", "0"))
 
+	logger.Info("IMS SUBSCRIBE ready to send",
+		logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+		logger.String("device_id", strings.TrimSpace(c.cfg.DeviceID)),
+		logger.String("destination", c.cfg.PCSCFAddr),
+		logger.String("transport", c.cfg.transportNetwork()))
+
 	// Send SUBSCRIBE with timeout
 	txCtx, cancel := context.WithTimeout(ctx, subscribeTransactionTimeout)
 	defer cancel()
 
+	logger.Info("IMS SUBSCRIBE calling doTransaction",
+		logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)))
+
 	resp, err := c.doTransaction(txCtx, req)
 	if err != nil {
+		logger.Error("IMS SUBSCRIBE transaction failed",
+			logger.String("trace_id", strings.TrimSpace(c.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(c.cfg.DeviceID)),
+			logger.String("error", err.Error()))
 		return fmt.Errorf("voiceclient: SUBSCRIBE transaction: %w", err)
 	}
 
