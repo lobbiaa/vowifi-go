@@ -61,19 +61,22 @@ func (s *Service) sendSubscribe(ctx context.Context) error {
 	req.SetTransport("TCP")
 	req.SetDestination(s.cfg.PCSCFAddr)
 
+	// Remove the auto-generated Via and replace with correct port_s
+	req.RemoveHeader("Via")
+	viaHost := fmt.Sprintf("[%s]:%d", s.cfg.LocalIP.String(), s.transportRuntime.policy.LocalPortS)
+	viaBranch := sip.GenerateBranchN(16)
+	viaValue := fmt.Sprintf("SIP/2.0/TCP %s;rport;branch=%s", viaHost, viaBranch)
+	req.AppendHeader(sip.NewHeader("Via", viaValue))
+
+	// Route header must come early (after Via)
+	if s.serviceRoute != "" {
+		req.AppendHeader(sip.NewHeader("Route", s.serviceRoute))
+	}
+
 	// From/To headers use target URI
 	fromTag := sip.GenerateTagN(16)
 	req.AppendHeader(sip.NewHeader("From", fmt.Sprintf("<%s>;tag=%s", targetURI, fromTag)))
 	req.AppendHeader(sip.NewHeader("To", fmt.Sprintf("<%s>", targetURI)))
-
-	// Contact header
-	contactURI := fmt.Sprintf("sip:imscore-%x@[%s]:%d", time.Now().UnixNano()&0xffffffff, s.cfg.LocalIP.String(), s.transportRuntime.policy.LocalPortS)
-	sipInstanceURN := s.cfg.SIPInstanceURN
-	if sipInstanceURN == "" {
-		sipInstanceURN = "<urn:gsma:imei:35022564-930064-6>"
-	}
-	contactStr := fmt.Sprintf("<%s>;+sip.instance=\"%s\"", contactURI, sipInstanceURN)
-	req.AppendHeader(sip.NewHeader("Contact", contactStr))
 
 	// Call-ID
 	callID := fmt.Sprintf("%x", time.Now().UnixNano())
@@ -85,10 +88,15 @@ func (s *Service) sendSubscribe(ctx context.Context) error {
 	// Max-Forwards
 	req.AppendHeader(sip.NewHeader("Max-Forwards", "70"))
 
-	// Route header with Service-Route
-	if s.serviceRoute != "" {
-		req.AppendHeader(sip.NewHeader("Route", s.serviceRoute))
+	// Contact header
+	contactURI := fmt.Sprintf("sip:imscore-%x@[%s]:%d", time.Now().UnixNano()&0xffffffff, s.cfg.LocalIP.String(), s.transportRuntime.policy.LocalPortS)
+	sipInstanceURN := s.cfg.SIPInstanceURN
+	if sipInstanceURN == "" {
+		sipInstanceURN = "urn:gsma:imei:35022564-930064-6"
 	}
+	// Match the format: +sip.instance="<urn:...>"
+	contactStr := fmt.Sprintf("<%s>;+sip.instance=\"<%s>\"", contactURI, sipInstanceURN)
+	req.AppendHeader(sip.NewHeader("Contact", contactStr))
 
 	// Security headers
 	req.AppendHeader(sip.NewHeader("Require", "sec-agree"))
@@ -110,11 +118,11 @@ func (s *Service) sendSubscribe(ctx context.Context) error {
 	// User-Agent
 	req.AppendHeader(sip.NewHeader("User-Agent", "iOS/18.2.1 iPhone (iPhone15,4)"))
 
-	// Event: reg
-	req.AppendHeader(sip.NewHeader("Event", "reg"))
-
 	// Expires
 	req.AppendHeader(sip.NewHeader("Expires", "600000"))
+
+	// Event: reg
+	req.AppendHeader(sip.NewHeader("Event", "reg"))
 
 	// Accept
 	req.AppendHeader(sip.NewHeader("Accept", "application/reginfo+xml"))
