@@ -3,6 +3,7 @@ package imscore
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -155,7 +156,14 @@ func (rt *transportRuntime) runPortSListener(ctx context.Context, swu voiceclien
 				return
 			}
 		}
-		secure := ipsec3gpp.WrapSecureChannel(rawConn, rt.transport, rt.policy)
+		// [CRITICAL FIX] IMS ESP is applied by the kernel via XFRM (see dialSecureRegisterConn
+		// in register.go). The kernel decrypts inbound ESP transparently, so the accepted TCP
+		// connection already delivers plaintext SIP. Using WrapSecureChannel here (userspace ESP)
+		// would make Read() parse the plaintext "NOTIFY ..." bytes as an IP/ESP packet: 'N'=0x4E
+		// is read as IP version 4, bytes [2:4] as an IPv4 total-length, and io.ReadFull then
+		// blocks forever waiting for bytes that never arrive — until the peer RSTs. Use the
+		// passthrough wrapper to read the raw (already-decrypted) TCP stream, matching port-c.
+		secure := ipsec3gpp.WrapSecureChannelPassthrough(rawConn)
 		logger.Info("IMS port-s accepted inbound push",
 			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 			logger.String("remote", rawConn.RemoteAddr().String()),
@@ -237,6 +245,19 @@ func (rt *transportRuntime) drainInboundPortS(ctx context.Context, conn *ipsec3g
 		})
 
 		if parseErr != nil {
+			// [CRITICAL FIX] ParseSIPStream is a *stateful streaming* parser. A large
+			// NOTIFY (Content-Length: 1700 + headers ~ 2KB) does not fit in a single TCP
+			// segment, so the first Read returns only a partial message and the parser
+			// returns ErrParseSipPartial. This is NOT fatal: the parser retains its buffer
+			// and content offset, so we must keep looping and feed it the next segment(s)
+			// until the full body arrives and the callback fires. Returning here (the old
+			// behavior) killed the goroutine on the very first partial read, so the NOTIFY
+			// was never handled and no 200 OK was ever sent.
+			if errors.Is(parseErr, sip.ErrParseSipPartial) {
+				logger.Debug("IMS port-s awaiting more SIP data (partial)",
+					logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)))
+				continue
+			}
 			logger.Warn("IMS port-s SIP parse error",
 				logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 				logger.String("error", parseErr.Error()))
