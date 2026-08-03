@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/emiago/sipgo/sip"
@@ -28,16 +29,23 @@ type transportRuntime struct {
 	policy    ipsec3gpp.Policy
 	transport *ipsec3gpp.Transport
 
+	// Registration routing state (from REGISTER 200 OK), needed to build
+	// UE-originated requests such as the RP-ACK MESSAGE for MT-SMS.
+	serviceRoute string
+	verifyHeader string
+
 	portSListener *singleConnListener
 	tcpWriteCh    chan sipWriteTask
 
 	portCConn *ipsec3gpp.SecureChannelConn
 
+	cseq uint32 // atomic CSeq counter for UE-originated standalone requests
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
-func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.SWUTCPDialer, policy ipsec3gpp.Policy, transport *ipsec3gpp.Transport, portCConn *ipsec3gpp.SecureChannelConn) (*transportRuntime, error) {
+func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.SWUTCPDialer, policy ipsec3gpp.Policy, transport *ipsec3gpp.Transport, portCConn *ipsec3gpp.SecureChannelConn, serviceRoute, verifyHeader string) (*transportRuntime, error) {
 	if portCConn == nil || transport == nil {
 		return nil, fmt.Errorf("imscore: transport runtime requires secure port-c connection")
 	}
@@ -54,12 +62,14 @@ func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.S
 	// The parent context is only used for startup validation above.
 	runtimeCtx, cancel := context.WithCancel(context.Background())
 	rt := &transportRuntime{
-		cfg:       cfg,
-		policy:    policy,
-		transport: transport,
-		portCConn: portCConn,
-		tcpWriteCh: make(chan sipWriteTask, 8),
-		cancel:    cancel,
+		cfg:          cfg,
+		policy:       policy,
+		transport:    transport,
+		serviceRoute: serviceRoute,
+		verifyHeader: verifyHeader,
+		portCConn:    portCConn,
+		tcpWriteCh:   make(chan sipWriteTask, 8),
+		cancel:       cancel,
 	}
 	rt.portSListener = newSingleConnListener(&net.TCPAddr{
 		IP:   cfg.LocalIP,
@@ -384,8 +394,8 @@ func (rt *transportRuntime) handleInboundMessage(ctx context.Context, conn *ipse
 				logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)))
 		}
 
-		// Send RP-ACK back to network
-		rt.sendRPAck(ctx, rpMR)
+		// Send RP-ACK back to network (new UE-originated MESSAGE per 3GPP TS 24.341)
+		rt.sendRPAck(req, rpMR)
 
 	case 0x02, 0x03: // RP-ACK (MS→Network or Network→MS)
 		// Delivery report: our outbound SMS was acked
@@ -438,24 +448,129 @@ func (rt *transportRuntime) handleInboundMessage(ctx context.Context, conn *ipse
 	}
 }
 
-func (rt *transportRuntime) sendRPAck(ctx context.Context, rpMR byte) {
-	// Build minimal RP-ACK per 3GPP TS 24.011: {MTI=0x02, MR}
+// sendRPAck sends an RP-ACK back to the network as a new UE-originated SIP
+// MESSAGE, per 3GPP TS 24.341 §5.3.2.4. This is what the SMSC waits for before
+// it considers the MT-SMS delivered; without it the network retransmits the
+// RP-DATA (and never advances to later segments of a concatenated SMS).
+//
+// The RP-ACK MESSAGE is addressed back to the SMSC/SMS-GMSC, whose URI is taken
+// from the incoming request's P-Asserted-Identity (fallback: From). It reuses
+// the same IMS routing state (Service-Route, Security-Verify, sec-agree) as the
+// SUBSCRIBE path and is sent over the protected port-c connection so the TCP
+// source port matches the port-c in Security-Client (P-CSCF ESP integrity).
+func (rt *transportRuntime) sendRPAck(orig *sip.Request, rpMR byte) {
+	// RP-ACK RPDU per 3GPP TS 24.011 §7.3.3: {MTI=0x02 (MS->Network), RP-MR}.
 	rpAck := []byte{0x02, rpMR}
 
-	// TODO: Wrap in SIP MESSAGE and send via port-c enqueueWrite
-	// For now, log that we would send it
-	logger.Info("IMS RP-ACK ready to send",
+	// Target = SMSC address from the incoming MESSAGE. Prefer P-Asserted-Identity
+	// (the network-asserted originator), fall back to the From header URI.
+	target := ""
+	if pai := orig.GetHeader("P-Asserted-Identity"); pai != nil {
+		target = extractURI(pai.Value())
+	}
+	if target == "" {
+		if from := orig.From(); from != nil {
+			target = "sip:" + from.Address.User + "@" + from.Address.Host
+			if from.Address.User == "" {
+				target = extractURI(from.Value())
+			}
+		}
+	}
+	if target == "" {
+		logger.Warn("IMS RP-ACK skipped: no target URI in incoming MESSAGE",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+			logger.Int("rp_mr", int(rpMR)))
+		return
+	}
+
+	recipient := sip.Uri{}
+	if err := sip.ParseUri(target, &recipient); err != nil {
+		logger.Warn("IMS RP-ACK failed to parse target URI",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("target", target),
+			logger.String("error", err.Error()))
+		return
+	}
+
+	impu := strings.TrimSpace(rt.cfg.PublicURI)
+
+	req := sip.NewRequest(sip.MESSAGE, recipient)
+	req.SetTransport("TCP")
+	req.SetDestination(rt.cfg.PCSCFAddr)
+
+	// Via must reflect the protected client port (port-c): the RP-ACK is a
+	// Flow-1 (UE port-c -> P-CSCF port-s) request, and the P-CSCF validates the
+	// TCP source port against the port-c in Security-Client.
+	req.RemoveHeader("Via")
+	viaHost := fmt.Sprintf("[%s]:%d", rt.cfg.LocalIP.String(), rt.policy.LocalPortC)
+	viaValue := fmt.Sprintf("SIP/2.0/TCP %s;rport;branch=%s", viaHost, sip.GenerateBranchN(16))
+	req.AppendHeader(sip.NewHeader("Via", viaValue))
+
+	// Route from REGISTER 200 OK Service-Route.
+	if rt.serviceRoute != "" {
+		req.AppendHeader(sip.NewHeader("Route", rt.serviceRoute))
+	}
+
+	// From = our IMPU; To = SMSC.
+	req.AppendHeader(sip.NewHeader("From", fmt.Sprintf("<%s>;tag=%s", impu, sip.GenerateTagN(16))))
+	req.AppendHeader(sip.NewHeader("To", fmt.Sprintf("<%s>", target)))
+
+	req.AppendHeader(sip.NewHeader("Call-ID", fmt.Sprintf("%x", time.Now().UnixNano())))
+
+	cseq := atomic.AddUint32(&rt.cseq, 1)
+	req.AppendHeader(sip.NewHeader("CSeq", fmt.Sprintf("%d MESSAGE", cseq)))
+
+	req.AppendHeader(sip.NewHeader("Max-Forwards", "70"))
+
+	// sec-agree + identity, matching the SUBSCRIBE path the P-CSCF already accepts.
+	req.AppendHeader(sip.NewHeader("Require", "sec-agree"))
+	req.AppendHeader(sip.NewHeader("Proxy-Require", "sec-agree"))
+	req.AppendHeader(sip.NewHeader("Supported", "path, sec-agree, 100rel, replaces, outbound, gruu"))
+	if impu != "" {
+		req.AppendHeader(sip.NewHeader("P-Preferred-Identity", fmt.Sprintf("<%s>", impu)))
+	}
+	if rt.verifyHeader != "" {
+		req.AppendHeader(sip.NewHeader("Security-Verify", rt.verifyHeader))
+	}
+	if ua := strings.TrimSpace(rt.cfg.UserAgent); ua != "" {
+		req.AppendHeader(sip.NewHeader("User-Agent", ua))
+	}
+
+	req.AppendHeader(sip.NewHeader("Content-Type", "application/vnd.3gpp.sms"))
+	req.SetBody(rpAck)
+
+	if err := rt.enqueueWrite([]byte(req.String())); err != nil {
+		logger.Warn("IMS RP-ACK send failed",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+			logger.Int("rp_mr", int(rpMR)),
+			logger.String("error", err.Error()))
+		return
+	}
+
+	logger.Info("IMS RP-ACK sent",
 		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 		logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
 		logger.Int("rp_mr", int(rpMR)),
-		logger.String("note", "Full SIP MESSAGE construction deferred"))
+		logger.String("target", target))
+}
 
-	// The proper implementation would:
-	// 1. Build SIP MESSAGE request to P-CSCF (reuse subscribe.go pattern)
-	// 2. Set Request-URI, From (PublicURI), To (SMSC from incoming From), Route, Security-Verify
-	// 3. Set Content-Type: application/vnd.3gpp.sms, body = rpAck
-	// 4. Call rt.enqueueWrite(msgBytes)
-	_ = rpAck
+// extractURI pulls the bare sip:/sips:/tel: URI out of a header value that may
+// carry a display name, angle brackets, and trailing parameters, e.g.
+// `"SMSC" <sip:10.1.1.1:5060>;tag=abc` -> `sip:10.1.1.1:5060`.
+func extractURI(value string) string {
+	value = strings.TrimSpace(value)
+	if lt := strings.Index(value, "<"); lt >= 0 {
+		if gt := strings.Index(value[lt:], ">"); gt >= 0 {
+			return strings.TrimSpace(value[lt+1 : lt+gt])
+		}
+	}
+	// No angle brackets: strip any params after the first ';'.
+	if semi := strings.Index(value, ";"); semi >= 0 {
+		value = value[:semi]
+	}
+	return strings.TrimSpace(value)
 }
 
 

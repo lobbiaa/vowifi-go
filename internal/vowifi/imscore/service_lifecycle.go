@@ -87,7 +87,7 @@ func (s *Service) Start(ctx context.Context) error {
 	s.serviceRoute = reg.serviceRoute
 
 	if reg.secureConn != nil && reg.transport != nil {
-		rt, err := startTransportRuntime(lifecycleCtx, s.cfg, swu, reg.ipsecPolicy, reg.transport, reg.secureConn)
+		rt, err := startTransportRuntime(lifecycleCtx, s.cfg, swu, reg.ipsecPolicy, reg.transport, reg.secureConn, s.serviceRoute, s.verifyHeader)
 		if err != nil {
 			logger.Warn("IMS transport runtime start failed",
 				logger.String("trace_id", strings.TrimSpace(s.cfg.TraceID)),
