@@ -55,6 +55,7 @@ type StartSessionInput struct {
 	RegistrarCandidates   []string
 	AKA                   sim.AKAProvider
 	DeliveryStore         messaging.DeliveryStore
+	InboundSMS            messaging.InboundSMSSink
 	IMSI                  string
 	MCC                   string
 	MNC                   string
@@ -137,6 +138,7 @@ func internalConfigFromIMS(ims IMSConfig, in StartSessionInput) Config {
 		ContactUser:           strings.TrimSpace(in.ContactUser),  // Pass ContactUser for UUID support
 		RegisterExpirySeconds: in.RegisterExpirySeconds,
 		DeliveryStore:         in.DeliveryStore,
+		InboundSMS:            in.InboundSMS,
 	}
 	if cfg.UserAgent == "" {
 		cfg.UserAgent = "iOS/18.2.1 iPhone (iPhone15,4)"

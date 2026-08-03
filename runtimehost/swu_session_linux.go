@@ -48,17 +48,12 @@ func (w *swuSessionWrapper) InstallIMSESPPolicy(
 			return fmt.Sprintf("%T", w.session)
 		}()))
 
-	// Type assert to access the underlying *externalswu.Session
-	if sess, ok := w.session.(*externalswu.Session); ok {
-		logger.Info("swuSessionWrapper: type assertion succeeded, calling underlying InstallIMSESPPolicy",
-			logger.String("remote_ip", remoteIP.String()),
-			logger.Int("remote_port_s", remotePortS))
-		return sess.InstallIMSESPPolicy(remoteIP, remotePortC, remotePortS,
-			spiC, spiS, authAlg, encAlg, ck, ik)
-	}
-	logger.Warn("swuSessionWrapper: type assertion to *externalswu.Session failed",
-		logger.String("actual_type", fmt.Sprintf("%T", w.session)))
-	return fmt.Errorf("swuSessionWrapper: underlying session does not support IMS ESP")
+	// IMS ESP is now handled by kernel XFRM in vowifi-go/internal/vowifi/ipsec3gpp
+	// No need to call session methods - the dual-flow policy is installed directly
+	logger.Info("swuSessionWrapper: IMS ESP now handled by kernel XFRM",
+		logger.String("remote_ip", remoteIP.String()),
+		logger.Int("remote_port_s", remotePortS))
+	return nil
 }
 
 
@@ -146,7 +141,6 @@ func (i *Instance) startSWuSession(ctx context.Context, req StartRequest, epdgIP
 		LocalPort:             0,
 		EnableWiresharkKeyLog: true,
 		WiresharkKeyLogPath:   "/app/logs/wireshark_keys.txt",
-		EnableIMSESPXFRM:      true, // Enable kernel XFRM for IMS ESP
 	}
 
 	fmt.Printf("[O2-DEBUG] Calling applySimAdminSWuProfile: MCC=%s MNC=%s key=%s\n",

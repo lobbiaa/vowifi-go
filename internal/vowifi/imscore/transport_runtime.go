@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/emiago/sipgo/sip"
 	"github.com/1239t/swu-go/pkg/logger"
@@ -276,6 +277,8 @@ func (rt *transportRuntime) handleInboundRequest(ctx context.Context, conn *ipse
 	switch method {
 	case sip.NOTIFY:
 		rt.handleNotify(ctx, conn, req)
+	case sip.MESSAGE:
+		rt.handleInboundMessage(ctx, conn, req)
 	case sip.INVITE:
 		logger.Info("IMS port-s received INVITE (not implemented yet)",
 			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)))
@@ -330,5 +333,130 @@ func (rt *transportRuntime) sendSimpleResponse(conn *ipsec3gpp.SecureChannelConn
 		logger.Int("status", statusCode),
 		logger.String("method", string(req.Method)))
 }
+
+func (rt *transportRuntime) handleInboundMessage(ctx context.Context, conn *ipsec3gpp.SecureChannelConn, req *sip.Request) {
+	// Verify Content-Type
+	ct := req.GetHeader("Content-Type")
+	if ct == nil || !strings.EqualFold(strings.TrimSpace(ct.Value()), "application/vnd.3gpp.sms") {
+		logger.Warn("IMS MESSAGE with unsupported Content-Type",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("content_type", func() string {
+				if ct != nil {
+					return ct.Value()
+				}
+				return "<nil>"
+			}()))
+		rt.sendSimpleResponse(conn, req, 415)
+		return
+	}
+
+	body := req.Body()
+	if len(body) < 2 {
+		logger.Warn("IMS MESSAGE body too short",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.Int("body_len", len(body)))
+		rt.sendSimpleResponse(conn, req, 400)
+		return
+	}
+
+	// Send 200 OK immediately (satisfies SIP transaction)
+	rt.sendSimpleResponse(conn, req, 200)
+
+	// Classify RP message type from first byte
+	rpMTI := body[0]
+	rpMR := body[1]
+
+	switch rpMTI {
+	case 0x00, 0x01: // RP-DATA (Network→MS or MS→Network)
+		// This is an inbound MT-SMS
+		logger.Info("IMS MESSAGE: MT-SMS received (RP-DATA)",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+			logger.Int("rp_mr", int(rpMR)),
+			logger.Int("body_len", len(body)))
+
+		// Surface to vohive for decode and processing
+		if rt.cfg.InboundSMS != nil {
+			rt.cfg.InboundSMS.DeliverInboundSMS(rt.cfg.DeviceID, body, time.Now())
+		} else {
+			logger.Warn("IMS MT-SMS received but InboundSMS sink is nil",
+				logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+				logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)))
+		}
+
+		// Send RP-ACK back to network
+		rt.sendRPAck(ctx, rpMR)
+
+	case 0x02, 0x03: // RP-ACK (MS→Network or Network→MS)
+		// Delivery report: our outbound SMS was acked
+		logger.Info("IMS MESSAGE: delivery report (RP-ACK)",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+			logger.Int("rp_mr", int(rpMR)))
+
+		// Record via DeliveryStore (reuses existing voiceclient pattern)
+		if rt.cfg.DeliveryStore != nil {
+			inReplyTo := ""
+			if irt := req.GetHeader("In-Reply-To"); irt != nil {
+				inReplyTo = irt.Value()
+			}
+			callID := req.CallID().Value()
+			_, _ = rt.cfg.DeliveryStore.MarkSMSDeliveryPartReport(
+				inReplyTo, callID, rt.cfg.DeviceID, int(rpMR),
+				"acked", 200, 0, "", time.Now(),
+			)
+		}
+
+	case 0x04, 0x05: // RP-ERROR (MS→Network or Network→MS)
+		// Delivery report: our outbound SMS failed
+		cause := 0
+		if len(body) >= 4 {
+			cause = int(body[3] & 0x7F)
+		}
+		logger.Info("IMS MESSAGE: delivery report (RP-ERROR)",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+			logger.Int("rp_mr", int(rpMR)),
+			logger.Int("rp_cause", cause))
+
+		if rt.cfg.DeliveryStore != nil {
+			inReplyTo := ""
+			if irt := req.GetHeader("In-Reply-To"); irt != nil {
+				inReplyTo = irt.Value()
+			}
+			callID := req.CallID().Value()
+			_, _ = rt.cfg.DeliveryStore.MarkSMSDeliveryPartReport(
+				inReplyTo, callID, rt.cfg.DeviceID, int(rpMR),
+				"failed", 200, cause, "", time.Now(),
+			)
+		}
+
+	default:
+		logger.Warn("IMS MESSAGE: unknown RP message type",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.Int("rp_mti", int(rpMTI)))
+	}
+}
+
+func (rt *transportRuntime) sendRPAck(ctx context.Context, rpMR byte) {
+	// Build minimal RP-ACK per 3GPP TS 24.011: {MTI=0x02, MR}
+	rpAck := []byte{0x02, rpMR}
+
+	// TODO: Wrap in SIP MESSAGE and send via port-c enqueueWrite
+	// For now, log that we would send it
+	logger.Info("IMS RP-ACK ready to send",
+		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+		logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+		logger.Int("rp_mr", int(rpMR)),
+		logger.String("note", "Full SIP MESSAGE construction deferred"))
+
+	// The proper implementation would:
+	// 1. Build SIP MESSAGE request to P-CSCF (reuse subscribe.go pattern)
+	// 2. Set Request-URI, From (PublicURI), To (SMSC from incoming From), Route, Security-Verify
+	// 3. Set Content-Type: application/vnd.3gpp.sms, body = rpAck
+	// 4. Call rt.enqueueWrite(msgBytes)
+	_ = rpAck
+}
+
 
 

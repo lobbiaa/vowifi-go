@@ -82,6 +82,18 @@ type DeliveryStore interface {
 	GetSMSDeliveryStatus(messageID string) (*DeliveryStatus, error)
 }
 
+// InboundSMSSink receives inbound SMS (MT-SMS) from the IMS MESSAGE handler
+// and routes them to the application layer for decode and storage. The raw
+// RP-DATA bytes (the complete SIP MESSAGE body, including RP-layer framing
+// and embedded TPDU) are passed up because vowifi-go must not import vohive's
+// smscodec. The sink implementation (in vohive) decodes the RP-DATA, extracts
+// the TPDU, decodes sender/text/timestamp, handles concatenation reassembly,
+// and injects into the canonical Worker.processSMS entry point — reusing the
+// same pipeline as QMI and MBIM.
+type InboundSMSSink interface {
+	DeliverInboundSMS(deviceID string, rpData []byte, at time.Time)
+}
+
 type Service interface {
 	// SendSMS transmits pre-encoded parts to peer (an MSISDN or SIP URI)
 	// as SIP MESSAGE(s) and tracks delivery via DeliveryStore (this is what

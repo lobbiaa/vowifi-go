@@ -55,4 +55,5 @@ type Config struct {
 	RegisterExpirySeconds int
 
 	DeliveryStore messaging.DeliveryStore
+	InboundSMS    messaging.InboundSMSSink
 }

@@ -161,6 +161,7 @@ type StartRequest struct {
 	RegisterExpiry time.Duration
 
 	DeliveryStore messaging.DeliveryStore
+	InboundSMS    messaging.InboundSMSSink
 	Dispatch      interface{}
 	BeforeStart   func(context.Context, SessionConfig) error
 	ShouldRun     func() bool
@@ -210,6 +211,7 @@ type Instance struct {
 	traceID         string
 	pcscfOverride string
 	deliveryStore messaging.DeliveryStore
+	inboundSMS    messaging.InboundSMSSink
 
 	mu          sync.Mutex
 	state       State
@@ -533,6 +535,7 @@ func Start(ctx context.Context, req StartRequest) (*Instance, error) {
 		traceID:         strings.TrimSpace(req.TraceID),
 		pcscfOverride: req.PCSCFAddr,
 		deliveryStore: req.DeliveryStore,
+		inboundSMS:    req.InboundSMS,
 		watchDone:     make(chan struct{}),
 		state: State{
 			DeviceID:      deviceID,
@@ -742,6 +745,7 @@ func (i *Instance) runStagedPipeline(ctx context.Context, req StartRequest) {
 		RegistrarCandidates:   pcscfCandidates,
 		AKA:                   i.akaProvider,
 		DeliveryStore:         i.deliveryStore,
+		InboundSMS:            i.inboundSMS,
 		IMSI:                  i.imsIMSI,
 		MCC:                   i.imsMCC,
 		MNC:                   i.imsMNC,
