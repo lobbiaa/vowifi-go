@@ -31,8 +31,9 @@ type transportRuntime struct {
 
 	// Registration routing state (from REGISTER 200 OK), needed to build
 	// UE-originated requests such as the RP-ACK MESSAGE for MT-SMS.
-	serviceRoute string
-	verifyHeader string
+	serviceRoute     string
+	verifyHeader     string
+	pAssociatedURI   string // Network-assigned public identity (e.g., sip:+491791564538@telefonica.de)
 
 	portSListener *singleConnListener
 	tcpWriteCh    chan sipWriteTask
@@ -45,7 +46,7 @@ type transportRuntime struct {
 	wg     sync.WaitGroup
 }
 
-func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.SWUTCPDialer, policy ipsec3gpp.Policy, transport *ipsec3gpp.Transport, portCConn *ipsec3gpp.SecureChannelConn, serviceRoute, verifyHeader string) (*transportRuntime, error) {
+func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.SWUTCPDialer, policy ipsec3gpp.Policy, transport *ipsec3gpp.Transport, portCConn *ipsec3gpp.SecureChannelConn, serviceRoute, verifyHeader, pAssociatedURI string) (*transportRuntime, error) {
 	if portCConn == nil || transport == nil {
 		return nil, fmt.Errorf("imscore: transport runtime requires secure port-c connection")
 	}
@@ -62,14 +63,15 @@ func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.S
 	// The parent context is only used for startup validation above.
 	runtimeCtx, cancel := context.WithCancel(context.Background())
 	rt := &transportRuntime{
-		cfg:          cfg,
-		policy:       policy,
-		transport:    transport,
-		serviceRoute: serviceRoute,
-		verifyHeader: verifyHeader,
-		portCConn:    portCConn,
-		tcpWriteCh:   make(chan sipWriteTask, 8),
-		cancel:       cancel,
+		cfg:            cfg,
+		policy:         policy,
+		transport:      transport,
+		serviceRoute:   serviceRoute,
+		verifyHeader:   verifyHeader,
+		pAssociatedURI: pAssociatedURI,
+		portCConn:      portCConn,
+		tcpWriteCh:     make(chan sipWriteTask, 8),
+		cancel:         cancel,
 	}
 	rt.portSListener = newSingleConnListener(&net.TCPAddr{
 		IP:   cfg.LocalIP,
@@ -493,7 +495,25 @@ func (rt *transportRuntime) sendRPAck(orig *sip.Request, rpMR byte) {
 		return
 	}
 
-	impu := strings.TrimSpace(rt.cfg.PublicURI)
+	// Parse P-Associated-URI to get the first SIP URI (network-assigned MSISDN-based identity).
+	// This is the registered public identity that must be used in From/P-Preferred-Identity
+	// for all UE-originated requests within this registration, per 3GPP TS 24.229.
+	targetURI := rt.pAssociatedURI
+	uris := strings.Split(rt.pAssociatedURI, ",")
+	for _, uri := range uris {
+		uri = strings.TrimSpace(uri)
+		if strings.HasPrefix(uri, "<sip:") || strings.HasPrefix(uri, "sip:") {
+			targetURI = strings.Trim(uri, "<>")
+			break
+		}
+	}
+	if targetURI == "" {
+		logger.Warn("IMS RP-ACK skipped: no valid public identity available",
+			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
+			logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
+			logger.Int("rp_mr", int(rpMR)))
+		return
+	}
 
 	req := sip.NewRequest(sip.MESSAGE, recipient)
 	req.SetTransport("TCP")
@@ -512,8 +532,9 @@ func (rt *transportRuntime) sendRPAck(orig *sip.Request, rpMR byte) {
 		req.AppendHeader(sip.NewHeader("Route", rt.serviceRoute))
 	}
 
-	// From = our IMPU; To = SMSC.
-	req.AppendHeader(sip.NewHeader("From", fmt.Sprintf("<%s>;tag=%s", impu, sip.GenerateTagN(16))))
+	// From = our network-assigned public identity (P-Associated-URI); To = SMSC.
+	fromTag := sip.GenerateTagN(16)
+	req.AppendHeader(sip.NewHeader("From", fmt.Sprintf("<%s>;tag=%s", targetURI, fromTag)))
 	req.AppendHeader(sip.NewHeader("To", fmt.Sprintf("<%s>", target)))
 
 	req.AppendHeader(sip.NewHeader("Call-ID", fmt.Sprintf("%x", time.Now().UnixNano())))
@@ -527,17 +548,32 @@ func (rt *transportRuntime) sendRPAck(orig *sip.Request, rpMR byte) {
 	req.AppendHeader(sip.NewHeader("Require", "sec-agree"))
 	req.AppendHeader(sip.NewHeader("Proxy-Require", "sec-agree"))
 	req.AppendHeader(sip.NewHeader("Supported", "path, sec-agree, 100rel, replaces, outbound, gruu"))
-	if impu != "" {
-		req.AppendHeader(sip.NewHeader("P-Preferred-Identity", fmt.Sprintf("<%s>", impu)))
-	}
+
+	// P-Access-Network-Info (optional but matches working implementation)
+	pani := fmt.Sprintf("IEEE-802.11; i-wlan-node-id=\"22e537707c11\";country=DE")
+	req.AppendHeader(sip.NewHeader("P-Access-Network-Info", pani))
+
+	// Security-Verify from REGISTER 200 OK
 	if rt.verifyHeader != "" {
 		req.AppendHeader(sip.NewHeader("Security-Verify", rt.verifyHeader))
 	}
+
+	// P-Preferred-Identity must match From identity
+	req.AppendHeader(sip.NewHeader("P-Preferred-Identity", fmt.Sprintf("<%s>", targetURI)))
+
 	if ua := strings.TrimSpace(rt.cfg.UserAgent); ua != "" {
 		req.AppendHeader(sip.NewHeader("User-Agent", ua))
 	}
 
 	req.AppendHeader(sip.NewHeader("Content-Type", "application/vnd.3gpp.sms"))
+	req.AppendHeader(sip.NewHeader("Allow", "MESSAGE"))
+	req.AppendHeader(sip.NewHeader("Request-Disposition", "no-fork"))
+
+	// In-Reply-To echoes the original MESSAGE's Call-ID for correlation
+	if origCallID := orig.CallID(); origCallID != nil {
+		req.AppendHeader(sip.NewHeader("In-Reply-To", origCallID.Value()))
+	}
+
 	req.SetBody(rpAck)
 
 	if err := rt.enqueueWrite([]byte(req.String())); err != nil {
@@ -553,7 +589,8 @@ func (rt *transportRuntime) sendRPAck(orig *sip.Request, rpMR byte) {
 		logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 		logger.String("device_id", strings.TrimSpace(rt.cfg.DeviceID)),
 		logger.Int("rp_mr", int(rpMR)),
-		logger.String("target", target))
+		logger.String("target", target),
+		logger.String("from_identity", targetURI))
 }
 
 // extractURI pulls the bare sip:/sips:/tel: URI out of a header value that may
