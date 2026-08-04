@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,7 +34,6 @@ type transportRuntime struct {
 	verifyHeader     string
 	pAssociatedURI   string // Network-assigned public identity (e.g., sip:+491791564538@telefonica.de)
 
-	portSListener *singleConnListener
 	tcpWriteCh    chan sipWriteTask
 
 	portCConn *ipsec3gpp.SecureChannelConn
@@ -73,10 +71,7 @@ func startTransportRuntime(parent context.Context, cfg Config, swu voiceclient.S
 		tcpWriteCh:     make(chan sipWriteTask, 8),
 		cancel:         cancel,
 	}
-	rt.portSListener = newSingleConnListener(&net.TCPAddr{
-		IP:   cfg.LocalIP,
-		Port: policy.LocalPortS,
-	})
+	// singleConnListener removed - was vestigial with zero Accept() callers
 
 	rt.wg.Add(1)
 	go rt.runTCPWriteChannel(runtimeCtx)
@@ -100,9 +95,6 @@ func (rt *transportRuntime) Close() {
 	}
 	if rt.cancel != nil {
 		rt.cancel()
-	}
-	if rt.portSListener != nil {
-		_ = rt.portSListener.Close()
 	}
 	if rt.portCConn != nil {
 		_ = rt.portCConn.Close()
@@ -181,7 +173,9 @@ func (rt *transportRuntime) runPortSListener(ctx context.Context, swu voiceclien
 			logger.String("trace_id", strings.TrimSpace(rt.cfg.TraceID)),
 			logger.String("remote", rawConn.RemoteAddr().String()),
 			logger.String("local", rawConn.LocalAddr().String()))
-		rt.portSListener.deliver(secure)
+		// Directly launch drain goroutine - the singleConnListener channel wrapper
+		// was vestigial (Accept() had zero callers) and caused silent connection drops
+		// when the buffered channel was full, preventing MESSAGE handling.
 		rt.wg.Add(1)
 		go rt.drainInboundPortS(ctx, secure)
 	}
